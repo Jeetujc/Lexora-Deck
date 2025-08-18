@@ -1,6 +1,8 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useNavigate } from "react-router-dom"
+import { useFlashcardProgress } from "../../contexts/FlashcardProgressContext"
 
 const QuizPage = () => {
   const [currentQuestion, setCurrentQuestion] = useState(0)
@@ -11,6 +13,17 @@ const QuizPage = () => {
   const [timeLeft, setTimeLeft] = useState(30)
   const [quizStarted, setQuizStarted] = useState(false)
   const [userAnswers, setUserAnswers] = useState([])
+  const [error, setError] = useState(null)
+  const { getUniqueCategories } = useFlashcardProgress()
+  const navigate = useNavigate()
+
+  const getTopicsDisplay = () => {
+    const categories = getUniqueCategories()
+    if (categories.length === 0) {
+      return "General Knowledge"
+    }
+    return categories.slice(0, 3).join(", ") + (categories.length > 3 ? "..." : "")
+  }
 
   // Sample quiz questions (frontend only)
   const quizQuestions = [
@@ -94,14 +107,24 @@ const QuizPage = () => {
   }, [timeLeft, quizStarted, showResult, quizCompleted])
 
   const startQuiz = () => {
-    setQuizStarted(true)
-    setCurrentQuestion(0)
-    setScore(0)
-    setSelectedAnswer(null)
-    setShowResult(false)
-    setQuizCompleted(false)
-    setTimeLeft(30)
-    setUserAnswers([])
+    try {
+      if (quizQuestions.length === 0) {
+        setError("No quiz questions available. Please try again later.")
+        return
+      }
+      setError(null)
+      setQuizStarted(true)
+      setCurrentQuestion(0)
+      setScore(0)
+      setSelectedAnswer(null)
+      setShowResult(false)
+      setQuizCompleted(false)
+      setTimeLeft(30)
+      setUserAnswers([])
+    } catch (err) {
+      console.error("Error starting quiz:", err)
+      setError("Failed to start quiz. Please try again.")
+    }
   }
 
   const handleAnswerSelect = (answerIndex) => {
@@ -156,6 +179,7 @@ const QuizPage = () => {
   }
 
   const getScoreColor = () => {
+    if (quizQuestions.length === 0) return "text-gray-600"
     const percentage = (score / quizQuestions.length) * 100
     if (percentage >= 80) return "text-green-600"
     if (percentage >= 60) return "text-yellow-600"
@@ -163,12 +187,30 @@ const QuizPage = () => {
   }
 
   const getScoreMessage = () => {
+    if (quizQuestions.length === 0) return "No questions available"
     const percentage = (score / quizQuestions.length) * 100
     if (percentage >= 90) return "Excellent! 🎉"
     if (percentage >= 80) return "Great job! 👏"
     if (percentage >= 70) return "Good work! 👍"
     if (percentage >= 60) return "Not bad! 📚"
     return "Keep studying! 💪"
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-red-500 text-6xl mb-4">⚠️</div>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button
+            onClick={() => setError(null)}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    )
   }
 
   if (!quizStarted) {
@@ -203,7 +245,7 @@ const QuizPage = () => {
                   <span className="text-2xl">🎯</span>
                   <div>
                     <h3 className="font-medium text-gray-900">Topics</h3>
-                    <p className="text-sm text-gray-600">Vocabulary, Hiragana, Numbers</p>
+                    <p className="text-sm text-gray-600">{getTopicsDisplay()}</p>
                   </div>
                 </div>
                 <div className="flex items-start space-x-3">
@@ -244,14 +286,16 @@ const QuizPage = () => {
               <div className={`text-6xl font-bold ${getScoreColor()} mb-2`}>
                 {score}/{quizQuestions.length}
               </div>
-              <div className="text-2xl text-gray-600">{Math.round((score / quizQuestions.length) * 100)}% Correct</div>
+              <div className="text-2xl text-gray-600">
+                {quizQuestions.length > 0 ? Math.round((score / quizQuestions.length) * 100) : 0}% Correct
+              </div>
             </div>
 
             {/* Progress Bar */}
             <div className="w-full bg-gray-200 rounded-full h-4 mb-6">
               <div
                 className="bg-gradient-to-r from-green-400 to-green-600 h-4 rounded-full transition-all duration-500"
-                style={{ width: `${(score / quizQuestions.length) * 100}%` }}
+                style={{ width: `${quizQuestions.length > 0 ? (score / quizQuestions.length) * 100 : 0}%` }}
               ></div>
             </div>
 
@@ -271,7 +315,7 @@ const QuizPage = () => {
               </div>
               <div className="text-center p-4 bg-gray-50 rounded-lg">
                 <div className="text-2xl font-bold text-purple-600">
-                  {Math.round((score / quizQuestions.length) * 100)}%
+                  {quizQuestions.length > 0 ? Math.round((score / quizQuestions.length) * 100) : 0}%
                 </div>
                 <div className="text-sm text-gray-600">Score</div>
               </div>
@@ -311,7 +355,7 @@ const QuizPage = () => {
               Take Quiz Again
             </button>
             <button
-              onClick={() => window.location.reload()}
+              onClick={() => navigate('/home')}
               className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg transition-all duration-200"
             >
               Back to Home
@@ -323,6 +367,24 @@ const QuizPage = () => {
   }
 
   const currentQ = quizQuestions[currentQuestion]
+
+  // Safety check for invalid question index
+  if (!currentQ) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-red-500 text-6xl mb-4">⚠️</div>
+          <p className="text-gray-600 mb-4">Quiz question not found</p>
+          <button
+            onClick={resetQuiz}
+            className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+          >
+            Restart Quiz
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-100 py-8">

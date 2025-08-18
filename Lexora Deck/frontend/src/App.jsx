@@ -1,6 +1,7 @@
 "use client"
-import { useState } from "react"
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom"
 import { AuthProvider, useAuth } from "./contexts/AuthContext"
+import { FlashcardProgressProvider } from "./contexts/FlashcardProgressContext"
 import AuthPage from "./components/Auth/AuthPage"
 import Navbar from "./components/Navbar"
 import FlashcardDeck from "./components/FlashcardDeck"
@@ -11,7 +12,6 @@ import Home from "./pages/Home"
 
 function AppContent() {
   const { user, loading } = useAuth()
-  const [currentPage, setCurrentPage] = useState("flashcards")
 
   if (loading) {
     return (
@@ -28,26 +28,22 @@ function AppContent() {
     return <AuthPage />
   }
 
-  const renderCurrentPage = () => {
-    switch (currentPage) {
-      case "home" :
-        return <Home/>
-      case "flashcards":
-        return <FlashcardDeck />
-      case "quiz":
-        return <QuizPage />
-      case "leaderboard":
-        return <LeaderboardPage />
-      default:
-        return <Home />
-    }
-  }
-
   return (
-    <div className="App min-h-screen bg-gray-50">
-      <Navbar currentPage={currentPage} onPageChange={setCurrentPage} />
-      {renderCurrentPage()}
-    </div>
+    <Router>
+      <FlashcardProgressProvider>
+        <div className="App min-h-screen bg-gray-50">
+          <Navbar />
+          <Routes>
+            <Route path="/" element={<Navigate to="/home" replace />} />
+            <Route path="/home" element={<Home />} />
+            <Route path="/flashcards" element={<FlashcardDeck />} />
+            <Route path="/quiz" element={<QuizPage />} />
+            <Route path="/leaderboard" element={<LeaderboardPage />} />
+            <Route path="/profile" element={<Home />} />
+          </Routes>
+        </div>
+      </FlashcardProgressProvider>
+    </Router>
   )
 }
 

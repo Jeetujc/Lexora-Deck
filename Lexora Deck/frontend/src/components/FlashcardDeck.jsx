@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useFlashcardProgress } from "../contexts/FlashcardProgressContext"
 
 const FlashcardDeck = () => {
   const [flippedCard, setFlippedCard] = useState(null)
@@ -11,6 +12,7 @@ const FlashcardDeck = () => {
   const [error, setError] = useState(null)
   const [userInput, setUserInput] = useState("")
   const [showInputModal, setShowInputModal] = useState(false)
+  const { addViewedCategory } = useFlashcardProgress()
 
   const cards = [
     // First row (3 cards)
@@ -212,6 +214,10 @@ const FlashcardDeck = () => {
     
     setFlippedCard(card)
     setIsCardFlipped(false)
+    
+    // Track the viewed category
+    addViewedCategory(card.category, card.title)
+    
     // Fetch related cards from Gemini API
     await fetchBackCards(card.id, card.category, card.title)
     // Small delay to show the card expanding before flipping
@@ -233,6 +239,9 @@ const FlashcardDeck = () => {
     setShowInputModal(false)
     setFlippedCard(searchCard)
     setIsCardFlipped(false)
+    
+    // Track the search as a viewed category
+    addViewedCategory("search", userInput)
     
     // Fetch related cards based on user input
     await fetchBackCards(searchCard.id, "general", userInput)

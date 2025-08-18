@@ -98,14 +98,14 @@ const LeaderboardPage = () => {
           <div className="bg-white rounded-lg shadow-md p-6 text-center">
             <div className="text-3xl mb-2">🎯</div>
             <div className="text-2xl font-bold text-gray-900">
-              {leaderboard.reduce((sum, user) => sum + user.total_cards_viewed, 0)}
+              {leaderboard.reduce((sum, user) => sum + (user?.total_cards_viewed || 0), 0)}
             </div>
             <div className="text-sm text-gray-600">Cards Studied</div>
           </div>
           <div className="bg-white rounded-lg shadow-md p-6 text-center">
             <div className="text-3xl mb-2">⭐</div>
             <div className="text-2xl font-bold text-gray-900">
-              {leaderboard.reduce((sum, user) => sum + user.total_points, 0)}
+              {leaderboard.reduce((sum, user) => sum + (user?.total_points || 0), 0)}
             </div>
             <div className="text-sm text-gray-600">Total Points</div>
           </div>
@@ -120,8 +120,8 @@ const LeaderboardPage = () => {
               <div className="text-center">
                 <div className="bg-gradient-to-t from-gray-300 to-gray-400 rounded-lg p-6 mb-4 shadow-lg transform hover:scale-105 transition-transform">
                   <div className="text-4xl mb-2">🥈</div>
-                  <div className="text-white font-bold text-lg">{leaderboard[1]?.name}</div>
-                  <div className="text-gray-100 text-sm">{leaderboard[1]?.total_points} pts</div>
+                  <div className="text-white font-bold text-lg">{leaderboard[1]?.name || 'N/A'}</div>
+                  <div className="text-gray-100 text-sm">{leaderboard[1]?.total_points || 0} pts</div>
                 </div>
                 <div className="bg-gray-300 h-20 rounded-t-lg flex items-center justify-center">
                   <span className="text-white font-bold text-xl">2</span>
@@ -132,8 +132,8 @@ const LeaderboardPage = () => {
               <div className="text-center">
                 <div className="bg-gradient-to-t from-yellow-400 to-yellow-500 rounded-lg p-6 mb-4 shadow-lg transform hover:scale-105 transition-transform">
                   <div className="text-4xl mb-2">🥇</div>
-                  <div className="text-white font-bold text-xl">{leaderboard[0]?.name}</div>
-                  <div className="text-yellow-100 text-sm">{leaderboard[0]?.total_points} pts</div>
+                  <div className="text-white font-bold text-xl">{leaderboard[0]?.name || 'N/A'}</div>
+                  <div className="text-yellow-100 text-sm">{leaderboard[0]?.total_points || 0} pts</div>
                 </div>
                 <div className="bg-yellow-400 h-32 rounded-t-lg flex items-center justify-center">
                   <span className="text-white font-bold text-2xl">1</span>
@@ -144,8 +144,8 @@ const LeaderboardPage = () => {
               <div className="text-center">
                 <div className="bg-gradient-to-t from-orange-400 to-orange-500 rounded-lg p-6 mb-4 shadow-lg transform hover:scale-105 transition-transform">
                   <div className="text-4xl mb-2">🥉</div>
-                  <div className="text-white font-bold text-lg">{leaderboard[2]?.name}</div>
-                  <div className="text-orange-100 text-sm">{leaderboard[2]?.total_points} pts</div>
+                  <div className="text-white font-bold text-lg">{leaderboard[2]?.name || 'N/A'}</div>
+                  <div className="text-orange-100 text-sm">{leaderboard[2]?.total_points || 0} pts</div>
                 </div>
                 <div className="bg-orange-400 h-16 rounded-t-lg flex items-center justify-center">
                   <span className="text-white font-bold text-xl">3</span>
@@ -161,7 +161,7 @@ const LeaderboardPage = () => {
             <h2 className="text-xl font-semibold text-gray-900">Full Rankings</h2>
           </div>
           <div className="divide-y divide-gray-200">
-            {leaderboard.map((userEntry, index) => (
+            {leaderboard.map((userEntry, mapIndex) => (
               <div
                 key={userEntry.id}
                 className={`px-6 py-4 hover:bg-gray-50 transition-colors ${
@@ -173,38 +173,38 @@ const LeaderboardPage = () => {
                     {/* Rank */}
                     <div
                       className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm ${getRankStyle(
-                        userEntry.rank,
+                        userEntry?.rank || mapIndex + 1,
                       )}`}
                     >
-                      {userEntry.rank}
+                      {userEntry?.rank || mapIndex + 1}
                     </div>
 
                     {/* User Info */}
                     <div>
                       <div className="flex items-center space-x-2">
                         <h3 className="text-lg font-medium text-gray-900">
-                          {userEntry.name}
+                          {userEntry?.name || 'Unknown User'}
                           {userEntry.id === user?.id && <span className="text-blue-600 text-sm ml-2">(You)</span>}
                         </h3>
-                        <span className={`text-lg ${userEntry.badge.color}`}>{userEntry.badge.emoji}</span>
+                        <span className={`text-lg ${userEntry?.badge?.color || ''}`}>{userEntry?.badge?.emoji || '🎯'}</span>
                       </div>
                       <div className="flex items-center space-x-4 text-sm text-gray-600">
-                        <span className={`flex items-center space-x-1 ${userEntry.level.color}`}>
-                          <span>{userEntry.level.icon}</span>
-                          <span>{userEntry.level.level}</span>
+                        <span className={`flex items-center space-x-1 ${userEntry?.level?.color || ''}`}>
+                          <span>{userEntry?.level?.icon || '📚'}</span>
+                          <span>{userEntry?.level?.level || 'Beginner'}</span>
                         </span>
-                        <span>Joined {formatDate(userEntry.created_at)}</span>
+                        <span>Joined {userEntry?.created_at ? formatDate(userEntry.created_at) : 'Unknown'}</span>
                       </div>
                     </div>
                   </div>
 
                   {/* Stats */}
                   <div className="text-right">
-                    <div className="text-2xl font-bold text-gray-900">{userEntry.total_points}</div>
+                    <div className="text-2xl font-bold text-gray-900">{userEntry?.total_points || 0}</div>
                     <div className="text-sm text-gray-600">points</div>
                     <div className="flex space-x-4 text-xs text-gray-500 mt-1">
-                      <span>{userEntry.unique_cards_studied} cards</span>
-                      <span>{userEntry.total_cards_viewed} views</span>
+                      <span>{userEntry?.unique_cards_studied || 0} cards</span>
+                      <span>{userEntry?.total_cards_viewed || 0} views</span>
                     </div>
                   </div>
                 </div>
