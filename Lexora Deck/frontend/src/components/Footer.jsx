@@ -48,7 +48,7 @@ const Footer = () => {
               <img src={logo}></img>
               {/* <span className="text-white font-bold text-lg">LX</span> */}
             </div>
-            <span className="ml-2 text-xl font-bold white">Lexora Deck</span>
+            <span className="ml-2 text-xl font-bold text-white">Lexora Deck</span>
           </div>
             <p className="text-gray-300 mb-6 max-w-md">
               We create beautiful, functional websites and applications that help businesses grow and succeed in the digital world.
