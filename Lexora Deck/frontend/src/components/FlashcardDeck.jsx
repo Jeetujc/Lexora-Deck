@@ -1,6 +1,8 @@
 "use client"
 
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
+import { useFlashcard } from "../contexts/FlashcardContext"
 
 const FlashcardDeck = () => {
   const [flippedCard, setFlippedCard] = useState(null)
@@ -11,6 +13,8 @@ const FlashcardDeck = () => {
   const [error, setError] = useState(null)
   const [userInput, setUserInput] = useState("")
   const [showInputModal, setShowInputModal] = useState(false)
+  const navigate = useNavigate()
+  const { setSelectedFlashcard } = useFlashcard()
 
   const cards = [
     // First row (3 cards)
@@ -250,6 +254,11 @@ const FlashcardDeck = () => {
       setCurrentBackCardIndex(0)
       setError(null)
     }, 300)
+  }
+
+  const handleStartQuiz = (card) => {
+    setSelectedFlashcard(card)
+    navigate('/quiz')
   }
 
   const handleCardFlip = () => {
@@ -625,13 +634,25 @@ const FlashcardDeck = () => {
             </div>
           </div>
 
-          {/* Close button */}
-          <button
-            onClick={handleCloseCard}
-            className="absolute top-8 right-8 w-12 h-12 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white text-2xl font-bold transition-all duration-200 backdrop-blur-sm"
-          >
-            ×
-          </button>
+          {/* Action buttons */}
+          <div className="absolute top-8 right-8 flex gap-4">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                handleStartQuiz(flippedCard)
+              }}
+              className="w-12 h-12 bg-purple-600 hover:bg-purple-700 rounded-full flex items-center justify-center text-white text-xl font-bold transition-all duration-200 backdrop-blur-sm"
+              title="Start Quiz"
+            >
+              🧠
+            </button>
+            <button
+              onClick={handleCloseCard}
+              className="w-12 h-12 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white text-2xl font-bold transition-all duration-200 backdrop-blur-sm"
+            >
+              ×
+            </button>
+          </div>
         </div>
       )}
     </div>

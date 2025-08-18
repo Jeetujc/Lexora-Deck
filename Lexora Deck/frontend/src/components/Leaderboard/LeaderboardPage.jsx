@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useAuth } from "../../contexts/AuthContext"
 
 const LeaderboardPage = () => {
@@ -11,9 +11,9 @@ const LeaderboardPage = () => {
 
   useEffect(() => {
     fetchLeaderboard()
-  }, [])
+  }, [fetchLeaderboard])
 
-  const fetchLeaderboard = async () => {
+  const fetchLeaderboard = useCallback(async () => {
     try {
       setLoading(true)
       const response = await fetch("/api/leaderboard", {
@@ -34,14 +34,28 @@ const LeaderboardPage = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [token])
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    })
+    if (!dateString) return 'Unknown'
+    try {
+      return new Date(dateString).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    } catch {
+      return 'Invalid date'
+    }
+  }
+
+  const safeNumber = (value, defaultValue = 0) => {
+    const num = Number(value)
+    return isNaN(num) ? defaultValue : num
+  }
+
+  const safeString = (value, defaultValue = 'Unknown') => {
+    return value && typeof value === 'string' ? value : defaultValue
   }
 
   const getRankStyle = (rank) => {
@@ -120,8 +134,8 @@ const LeaderboardPage = () => {
               <div className="text-center">
                 <div className="bg-gradient-to-t from-gray-300 to-gray-400 rounded-lg p-6 mb-4 shadow-lg transform hover:scale-105 transition-transform">
                   <div className="text-4xl mb-2">🥈</div>
-                  <div className="text-white font-bold text-lg">{leaderboard[1]?.name}</div>
-                  <div className="text-gray-100 text-sm">{leaderboard[1]?.total_points} pts</div>
+                  <div className="text-white font-bold text-lg">{safeString(leaderboard[1]?.name)}</div>
+                  <div className="text-gray-100 text-sm">{safeNumber(leaderboard[1]?.total_points)} pts</div>
                 </div>
                 <div className="bg-gray-300 h-20 rounded-t-lg flex items-center justify-center">
                   <span className="text-white font-bold text-xl">2</span>
@@ -132,8 +146,8 @@ const LeaderboardPage = () => {
               <div className="text-center">
                 <div className="bg-gradient-to-t from-yellow-400 to-yellow-500 rounded-lg p-6 mb-4 shadow-lg transform hover:scale-105 transition-transform">
                   <div className="text-4xl mb-2">🥇</div>
-                  <div className="text-white font-bold text-xl">{leaderboard[0]?.name}</div>
-                  <div className="text-yellow-100 text-sm">{leaderboard[0]?.total_points} pts</div>
+                  <div className="text-white font-bold text-xl">{safeString(leaderboard[0]?.name)}</div>
+                  <div className="text-yellow-100 text-sm">{safeNumber(leaderboard[0]?.total_points)} pts</div>
                 </div>
                 <div className="bg-yellow-400 h-32 rounded-t-lg flex items-center justify-center">
                   <span className="text-white font-bold text-2xl">1</span>
@@ -144,8 +158,8 @@ const LeaderboardPage = () => {
               <div className="text-center">
                 <div className="bg-gradient-to-t from-orange-400 to-orange-500 rounded-lg p-6 mb-4 shadow-lg transform hover:scale-105 transition-transform">
                   <div className="text-4xl mb-2">🥉</div>
-                  <div className="text-white font-bold text-lg">{leaderboard[2]?.name}</div>
-                  <div className="text-orange-100 text-sm">{leaderboard[2]?.total_points} pts</div>
+                  <div className="text-white font-bold text-lg">{safeString(leaderboard[2]?.name)}</div>
+                  <div className="text-orange-100 text-sm">{safeNumber(leaderboard[2]?.total_points)} pts</div>
                 </div>
                 <div className="bg-orange-400 h-16 rounded-t-lg flex items-center justify-center">
                   <span className="text-white font-bold text-xl">3</span>
@@ -161,7 +175,7 @@ const LeaderboardPage = () => {
             <h2 className="text-xl font-semibold text-gray-900">Full Rankings</h2>
           </div>
           <div className="divide-y divide-gray-200">
-            {leaderboard.map((userEntry, index) => (
+            {leaderboard.map((userEntry) => (
               <div
                 key={userEntry.id}
                 className={`px-6 py-4 hover:bg-gray-50 transition-colors ${
@@ -183,15 +197,17 @@ const LeaderboardPage = () => {
                     <div>
                       <div className="flex items-center space-x-2">
                         <h3 className="text-lg font-medium text-gray-900">
-                          {userEntry.name}
+                          {safeString(userEntry.name)}
                           {userEntry.id === user?.id && <span className="text-blue-600 text-sm ml-2">(You)</span>}
                         </h3>
-                        <span className={`text-lg ${userEntry.badge.color}`}>{userEntry.badge.emoji}</span>
+                        <span className={`text-lg ${userEntry.badge?.color || 'text-gray-500'}`}>
+                          {userEntry.badge?.emoji || '🏆'}
+                        </span>
                       </div>
                       <div className="flex items-center space-x-4 text-sm text-gray-600">
-                        <span className={`flex items-center space-x-1 ${userEntry.level.color}`}>
-                          <span>{userEntry.level.icon}</span>
-                          <span>{userEntry.level.level}</span>
+                        <span className={`flex items-center space-x-1 ${userEntry.level?.color || 'text-gray-500'}`}>
+                          <span>{userEntry.level?.icon || '📚'}</span>
+                          <span>{userEntry.level?.level || 'Newcomer'}</span>
                         </span>
                         <span>Joined {formatDate(userEntry.created_at)}</span>
                       </div>
@@ -200,11 +216,11 @@ const LeaderboardPage = () => {
 
                   {/* Stats */}
                   <div className="text-right">
-                    <div className="text-2xl font-bold text-gray-900">{userEntry.total_points}</div>
+                    <div className="text-2xl font-bold text-gray-900">{safeNumber(userEntry.total_points)}</div>
                     <div className="text-sm text-gray-600">points</div>
                     <div className="flex space-x-4 text-xs text-gray-500 mt-1">
-                      <span>{userEntry.unique_cards_studied} cards</span>
-                      <span>{userEntry.total_cards_viewed} views</span>
+                      <span>{safeNumber(userEntry.unique_cards_studied)} cards</span>
+                      <span>{safeNumber(userEntry.total_cards_viewed)} views</span>
                     </div>
                   </div>
                 </div>

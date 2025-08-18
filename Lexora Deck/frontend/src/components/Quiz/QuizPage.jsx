@@ -1,6 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
+import { useNavigate } from "react-router-dom"
+import { useFlashcard } from "../../contexts/FlashcardContext"
 
 const QuizPage = () => {
   const [currentQuestion, setCurrentQuestion] = useState(0)
@@ -11,9 +13,88 @@ const QuizPage = () => {
   const [timeLeft, setTimeLeft] = useState(30)
   const [quizStarted, setQuizStarted] = useState(false)
   const [userAnswers, setUserAnswers] = useState([])
+  const [quizQuestions, setQuizQuestions] = useState([])
+  const navigate = useNavigate()
+  const { selectedFlashcard } = useFlashcard()
 
-  // Sample quiz questions (frontend only)
-  const quizQuestions = [
+  // Generate quiz questions based on selected flashcard
+  const generateQuizQuestions = useCallback((flashcard) => {
+    if (!flashcard) {
+      return getDefaultQuestions()
+    }
+
+    const category = flashcard.category || flashcard.title.toLowerCase()
+    
+    // Question templates based on category
+    const questionTemplates = {
+      transportation: [
+        {
+          question: `What is the most eco-friendly form of ${flashcard.title.toLowerCase()}?`,
+          options: ["Electric vehicles", "Public transit", "Walking/Cycling", "Hybrid cars"],
+          correct: 2,
+          explanation: "Walking and cycling produce zero emissions and are the most environmentally friendly options."
+        },
+        {
+          question: `Which is typically the fastest mode of transportation in ${flashcard.title}?`,
+          options: ["Car", "Train", "Bicycle", "Bus"],
+          correct: 1,
+          explanation: "Trains generally offer the fastest travel times for medium to long distances."
+        }
+      ],
+      finance: [
+        {
+          question: `What is a key principle of ${flashcard.title.toLowerCase()}?`,
+          options: ["Spend more than you earn", "Save and invest regularly", "Avoid all investments", "Only use cash"],
+          correct: 1,
+          explanation: "Regular saving and investing is fundamental to building long-term wealth."
+        },
+        {
+          question: `What does compound interest mean in ${flashcard.title.toLowerCase()}?`,
+          options: ["Simple addition", "Interest on interest", "Monthly fees", "Tax deductions"],
+          correct: 1,
+          explanation: "Compound interest means earning interest on both your initial investment and previously earned interest."
+        }
+      ],
+      education: [
+        {
+          question: `What makes ${flashcard.title.toLowerCase()} effective for learning?`,
+          options: ["Passive reading only", "Active engagement", "Memorization only", "Group discussions only"],
+          correct: 1,
+          explanation: "Active engagement with material leads to better understanding and retention."
+        },
+        {
+          question: `Which learning method is most effective for ${flashcard.title.toLowerCase()}?`,
+          options: ["Cramming", "Spaced repetition", "Single reading", "Highlighting only"],
+          correct: 1,
+          explanation: "Spaced repetition helps move information from short-term to long-term memory."
+        }
+      ],
+      food: [
+        {
+          question: `What is important about ${flashcard.title.toLowerCase()} nutrition?`,
+          options: ["Only calories matter", "Balanced nutrients", "Only protein", "Only carbs"],
+          correct: 1,
+          explanation: "A balanced diet with proper nutrients is essential for good health."
+        },
+        {
+          question: `How should you approach ${flashcard.title.toLowerCase()} safety?`,
+          options: ["Ignore expiration dates", "Proper storage and handling", "Room temperature only", "Freeze everything"],
+          correct: 1,
+          explanation: "Proper food storage and handling prevents contamination and maintains nutritional value."
+        }
+      ]
+    }
+
+    const templates = questionTemplates[category] || questionTemplates.education
+    
+    return templates.map((template, index) => ({
+      id: index + 1,
+      ...template,
+      category: flashcard.title
+    }))
+  }, [])
+
+  const getDefaultQuestions = () => [
     {
       id: 1,
       question: "What does '自転車' mean in English?",
@@ -80,6 +161,12 @@ const QuizPage = () => {
     },
   ]
 
+  // Set up quiz questions when component mounts or flashcard changes
+  useEffect(() => {
+    const questions = generateQuizQuestions(selectedFlashcard)
+    setQuizQuestions(questions)
+  }, [selectedFlashcard, generateQuizQuestions])
+
   // Timer effect
   useEffect(() => {
     let timer
@@ -91,7 +178,7 @@ const QuizPage = () => {
       handleNextQuestion()
     }
     return () => clearTimeout(timer)
-  }, [timeLeft, quizStarted, showResult, quizCompleted])
+  }, [timeLeft, quizStarted, showResult, quizCompleted, handleNextQuestion])
 
   const startQuiz = () => {
     setQuizStarted(true)
@@ -110,7 +197,7 @@ const QuizPage = () => {
     }
   }
 
-  const handleNextQuestion = () => {
+  const handleNextQuestion = useCallback(() => {
     const currentQ = quizQuestions[currentQuestion]
     const isCorrect = selectedAnswer === currentQ.correct
 
@@ -142,7 +229,7 @@ const QuizPage = () => {
         setQuizCompleted(true)
       }
     }, 2000)
-  }
+  }, [quizQuestions, currentQuestion, selectedAnswer, userAnswers, score])
 
   const resetQuiz = () => {
     setQuizStarted(false)
@@ -311,10 +398,10 @@ const QuizPage = () => {
               Take Quiz Again
             </button>
             <button
-              onClick={() => window.location.reload()}
+              onClick={() => navigate('/flashcards')}
               className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg transition-all duration-200"
             >
-              Back to Home
+              Back to Flashcards
             </button>
           </div>
         </div>
@@ -323,6 +410,31 @@ const QuizPage = () => {
   }
 
   const currentQ = quizQuestions[currentQuestion]
+
+  // If no questions available, show error state
+  if (quizQuestions.length === 0) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-100 py-8">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="bg-white rounded-lg shadow-lg p-8 text-center">
+            <h1 className="text-3xl font-bold text-gray-900 mb-4">Quiz Not Available</h1>
+            <p className="text-gray-600 mb-6">
+              {selectedFlashcard 
+                ? `No quiz questions available for "${selectedFlashcard.title}". Please try another flashcard.`
+                : "Please select a flashcard first to start a quiz."
+              }
+            </p>
+            <button
+              onClick={() => navigate('/flashcards')}
+              className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition-all duration-200"
+            >
+              Back to Flashcards
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-100 py-8">
