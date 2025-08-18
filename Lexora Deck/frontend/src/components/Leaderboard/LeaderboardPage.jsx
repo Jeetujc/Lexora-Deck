@@ -20,7 +20,7 @@ const LeaderboardPage = () => {
 
       if (response.ok) {
         const data = await response.json()
-        setLeaderboard(data.leaderboard)
+        setLeaderboard(data.leaderboard || [])
       } else {
         setError("Failed to load leaderboard")
       }
@@ -36,12 +36,34 @@ const LeaderboardPage = () => {
     fetchLeaderboard()
   }, [fetchLeaderboard])
 
+  // Helper function to safely format numbers
+  const safeNumber = (value, fallback = 0) => {
+    if (value === null || value === undefined || isNaN(value)) {
+      return fallback
+    }
+    return parseInt(value) || fallback
+  }
+
+  // Helper function to safely handle level data
+  const safeLevel = (level) => {
+    return {
+      icon: level?.icon || "🎯",
+      level: level?.level || "Beginner",
+      color: level?.color || "text-gray-600"
+    }
+  }
+
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    })
+    if (!dateString) return "Unknown"
+    try {
+      return new Date(dateString).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    } catch (err) {
+      return "Unknown"
+    }
   }
 
   const getRankStyle = (rank) => {

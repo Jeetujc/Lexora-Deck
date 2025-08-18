@@ -1,8 +1,10 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from "react"
+import { useNavigate } from "react-router-dom"
 
 const QuizPage = () => {
+  const navigate = useNavigate()
   const [currentQuestion, setCurrentQuestion] = useState(0)
   const [selectedAnswer, setSelectedAnswer] = useState(null)
   const [score, setScore] = useState(0)
@@ -11,9 +13,119 @@ const QuizPage = () => {
   const [timeLeft, setTimeLeft] = useState(30)
   const [quizStarted, setQuizStarted] = useState(false)
   const [userAnswers, setUserAnswers] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [flashcardTopics, setFlashcardTopics] = useState([])
 
-  // Sample quiz questions (frontend only) - will be replaced with dynamic questions
-  const quizQuestions = useMemo(() => [
+  // Available flashcard topics
+  const availableTopics = [
+    "Finance", "Health Studies", "Coding", "English", "Gym", 
+    "Book", "House Affordability", "Car", "Food"
+  ]
+
+  // Function to generate quiz questions from flashcard data
+  const generateQuizFromFlashcards = async (topics) => {
+    try {
+      setLoading(true)
+      setError(null)
+      
+      const quizQuestions = []
+      
+      // Randomly select 3-4 topics for the quiz
+      const selectedTopics = topics.sort(() => 0.5 - Math.random()).slice(0, Math.min(4, topics.length))
+      
+      for (const topic of selectedTopics) {
+        try {
+          const response = await fetch("/api/gemini/cards", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ cardName: topic }),
+          })
+          
+          if (response.ok) {
+            const data = await response.json()
+            if (data.points && data.points.length > 0) {
+              // Generate 2 questions per topic
+              const topicQuestions = generateQuestionsFromPoints(data.points, topic, quizQuestions.length)
+              quizQuestions.push(...topicQuestions.slice(0, 2))
+            }
+          }
+        } catch (err) {
+          console.error(`Error fetching data for ${topic}:`, err)
+        }
+      }
+      
+      // If we don't have enough questions, add some fallback questions
+      if (quizQuestions.length < 8) {
+        const fallbackQuestions = getFallbackQuestions()
+        quizQuestions.push(...fallbackQuestions.slice(0, 8 - quizQuestions.length))
+      }
+      
+      return quizQuestions
+    } catch (err) {
+      console.error("Error generating quiz:", err)
+      setError("Failed to generate quiz questions. Using default questions.")
+      return getFallbackQuestions()
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Helper function to generate questions from flashcard points
+  const generateQuestionsFromPoints = (points, topic, startingId) => {
+    const questions = []
+    
+    for (let i = 0; i < Math.min(2, points.length); i++) {
+      const point = points[i]
+      if (point.heading && point.description) {
+        // Create a question about the heading/description
+        const correctAnswer = point.heading
+        const wrongAnswers = generateWrongAnswers(correctAnswer, points, topic)
+        
+        const options = [correctAnswer, ...wrongAnswers].sort(() => 0.5 - Math.random())
+        const correctIndex = options.findIndex(opt => opt === correctAnswer)
+        
+        questions.push({
+          id: startingId + i + 1,
+          question: `What topic relates to: "${point.description.slice(0, 100)}..."?`,
+          options: options,
+          correct: correctIndex,
+          explanation: `${point.heading}: ${point.description}`,
+          category: topic,
+        })
+      }
+    }
+    
+    return questions
+  }
+
+  // Helper function to generate wrong answers
+  const generateWrongAnswers = (correctAnswer, allPoints, topic) => {
+    const wrongAnswers = []
+    const otherHeadings = allPoints
+      .map(p => p.heading)
+      .filter(h => h !== correctAnswer)
+      .slice(0, 2)
+    
+    wrongAnswers.push(...otherHeadings)
+    
+    // Add some generic wrong answers if needed
+    const genericWrongAnswers = [
+      "Historical Background", "Modern Applications", "Cultural Impact", 
+      "Technical Details", "Future Prospects", "Basic Principles"
+    ].filter(ans => ans !== correctAnswer && !wrongAnswers.includes(ans))
+    
+    while (wrongAnswers.length < 3 && genericWrongAnswers.length > 0) {
+      wrongAnswers.push(genericWrongAnswers.shift())
+    }
+    
+    return wrongAnswers.slice(0, 3)
+  }
+
+  // Fallback questions if API fails
+  const getFallbackQuestions = () => [
     {
       id: 1,
       question: "What does '自転車' mean in English?",
@@ -78,7 +190,20 @@ const QuizPage = () => {
       explanation: "'三' (san) means three in Japanese.",
       category: "Numbers",
     },
-  ], [])
+  ]
+
+  // Dynamic quiz questions based on flashcard data
+  const [quizQuestions, setQuizQuestions] = useState([])
+
+  // Initialize quiz questions when component mounts
+  useEffect(() => {
+    const initializeQuiz = async () => {
+      const dynamicQuestions = await generateQuizFromFlashcards(availableTopics)
+      setQuizQuestions(dynamicQuestions)
+    }
+    
+    initializeQuiz()
+  }, [])
 
   // Timer effect
   useEffect(() => {
@@ -93,7 +218,12 @@ const QuizPage = () => {
     return () => clearTimeout(timer)
   }, [timeLeft, quizStarted, showResult, quizCompleted, handleNextQuestion])
 
-  const startQuiz = () => {
+  const startQuiz = async () => {
+    setLoading(true)
+    // Generate new quiz questions
+    const newQuestions = await generateQuizFromFlashcards(availableTopics)
+    setQuizQuestions(newQuestions)
+    
     setQuizStarted(true)
     setCurrentQuestion(0)
     setScore(0)
@@ -102,6 +232,7 @@ const QuizPage = () => {
     setQuizCompleted(false)
     setTimeLeft(30)
     setUserAnswers([])
+    setLoading(false)
   }
 
   const handleAnswerSelect = (answerIndex) => {
@@ -144,7 +275,12 @@ const QuizPage = () => {
     }, 2000)
   }, [currentQuestion, selectedAnswer, quizQuestions])
 
-  const resetQuiz = () => {
+  const resetQuiz = async () => {
+    setLoading(true)
+    // Generate new quiz questions
+    const newQuestions = await generateQuizFromFlashcards(availableTopics)
+    setQuizQuestions(newQuestions)
+    
     setQuizStarted(false)
     setCurrentQuestion(0)
     setScore(0)
@@ -153,6 +289,7 @@ const QuizPage = () => {
     setQuizCompleted(false)
     setTimeLeft(30)
     setUserAnswers([])
+    setLoading(false)
   }
 
   const getScoreColor = () => {
@@ -169,6 +306,47 @@ const QuizPage = () => {
     if (percentage >= 70) return "Good work! 👍"
     if (percentage >= 60) return "Not bad! 📚"
     return "Keep studying! 💪"
+  }
+
+  // Show loading state while questions are being generated
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100 py-8">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center">
+            <div className="mb-8">
+              <span className="text-8xl">🧠</span>
+            </div>
+            <h1 className="text-4xl font-bold text-gray-900 mb-4">Generating Quiz Questions</h1>
+            <p className="text-lg text-gray-600 mb-8">Creating personalized questions from your flashcard topics...</p>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Show error state if quiz generation failed
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100 py-8">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center">
+            <div className="mb-8">
+              <span className="text-8xl">⚠️</span>
+            </div>
+            <h1 className="text-4xl font-bold text-gray-900 mb-4">Quiz Generation Error</h1>
+            <p className="text-lg text-gray-600 mb-8">{error}</p>
+            <button
+              onClick={() => setError(null)}
+              className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg transition-all duration-200"
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   if (!quizStarted) {
@@ -311,7 +489,7 @@ const QuizPage = () => {
               Take Quiz Again
             </button>
             <button
-              onClick={() => window.location.reload()}
+              onClick={() => navigate('/home')}
               className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg transition-all duration-200"
             >
               Back to Home
