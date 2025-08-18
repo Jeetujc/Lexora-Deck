@@ -1,8 +1,13 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useSearchParams, useNavigate } from "react-router-dom"
 
 const QuizPage = () => {
+  const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
+  const topic = searchParams.get('topic')
+  
   const [currentQuestion, setCurrentQuestion] = useState(0)
   const [selectedAnswer, setSelectedAnswer] = useState(null)
   const [score, setScore] = useState(0)
@@ -11,9 +16,12 @@ const QuizPage = () => {
   const [timeLeft, setTimeLeft] = useState(30)
   const [quizStarted, setQuizStarted] = useState(false)
   const [userAnswers, setUserAnswers] = useState([])
+  const [quizQuestions, setQuizQuestions] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
 
-  // Sample quiz questions (frontend only)
-  const quizQuestions = [
+  // Default fallback quiz questions (for backward compatibility)
+  const defaultQuizQuestions = [
     {
       id: 1,
       question: "What does '自転車' mean in English?",
@@ -79,6 +87,100 @@ const QuizPage = () => {
       category: "Numbers",
     },
   ]
+
+  // Function to generate MCQ questions from flashcard points
+  const generateQuestionsFromPoints = (points, topicName) => {
+    const questions = []
+    
+    // Take first 5-8 points to create questions
+    const selectedPoints = points.slice(0, Math.min(8, points.length))
+    
+    selectedPoints.forEach((point, index) => {
+      // Create a question about the heading/description
+      const question = {
+        id: index + 1,
+        question: `What is important to know about "${point.heading}" regarding ${topicName}?`,
+        options: [
+          point.description,
+          "This is not related to the topic",
+          "This information is outdated",
+          "This is incorrect information"
+        ],
+        correct: 0, // First option is always correct (the actual description)
+        explanation: `${point.heading}: ${point.description}`,
+        category: topicName
+      }
+      
+      // Shuffle options (except keeping correct answer trackable)
+      const correctAnswer = question.options[0]
+      const shuffledOptions = [...question.options]
+      
+      // Simple shuffle
+      for (let i = shuffledOptions.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledOptions[i], shuffledOptions[j]] = [shuffledOptions[j], shuffledOptions[i]]
+      }
+      
+      // Find where the correct answer ended up
+      question.options = shuffledOptions
+      question.correct = shuffledOptions.indexOf(correctAnswer)
+      
+      questions.push(question)
+    })
+    
+    return questions
+  }
+
+  // Function to fetch topic-based questions
+  const fetchTopicQuestions = async (topicName) => {
+    setLoading(true)
+    setError(null)
+    
+    try {
+      console.log("🚀 Fetching quiz data for topic:", topicName)
+      
+      const response = await fetch("/api/gemini/cards", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          cardName: topicName,
+          category: "quiz",
+        }),
+      })
+      
+      if (!response.ok) {
+        throw new Error(`API response not ok: ${response.status}`)
+      }
+      
+      const data = await response.json()
+      
+      if (data.points && data.points.length > 0) {
+        const generatedQuestions = generateQuestionsFromPoints(data.points, topicName)
+        setQuizQuestions(generatedQuestions)
+        console.log("✅ Generated", generatedQuestions.length, "questions from API")
+      } else {
+        throw new Error("No points received from API")
+      }
+      
+    } catch (error) {
+      console.error("❌ Failed to fetch topic questions:", error)
+      setError(`Failed to load quiz for "${topicName}". Using default quiz.`)
+      setQuizQuestions(defaultQuizQuestions)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Effect to load questions when component mounts or topic changes
+  useEffect(() => {
+    if (topic) {
+      fetchTopicQuestions(topic)
+    } else {
+      setQuizQuestions(defaultQuizQuestions)
+    }
+  }, [topic])
 
   // Timer effect
   useEffect(() => {
@@ -171,6 +273,23 @@ const QuizPage = () => {
     return "Keep studying! 💪"
   }
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100 py-8">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center">
+            <div className="mb-8">
+              <span className="text-8xl">🧠</span>
+            </div>
+            <h1 className="text-4xl font-bold text-gray-900 mb-4">Loading Quiz...</h1>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto mb-4"></div>
+            <p className="text-lg text-gray-600">Generating questions for {topic || 'general topics'}</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (!quizStarted) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100 py-8">
@@ -179,8 +298,18 @@ const QuizPage = () => {
             <div className="mb-8">
               <span className="text-8xl">🧠</span>
             </div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-4">Japanese Quiz Challenge</h1>
-            <p className="text-lg text-gray-600 mb-8">Test your Japanese knowledge with our interactive quiz!</p>
+            <h1 className="text-4xl font-bold text-gray-900 mb-4">
+              {topic ? `${topic} Quiz Challenge` : 'Japanese Quiz Challenge'}
+            </h1>
+            <p className="text-lg text-gray-600 mb-8">
+              {topic ? `Test your knowledge about ${topic}!` : 'Test your Japanese knowledge with our interactive quiz!'}
+            </p>
+
+            {error && (
+              <div className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded mb-6">
+                <p className="text-sm">{error}</p>
+              </div>
+            )}
 
             <div className="bg-white rounded-lg shadow-lg p-8 mb-8 max-w-2xl mx-auto">
               <h2 className="text-2xl font-semibold text-gray-900 mb-6">Quiz Rules</h2>
@@ -203,7 +332,9 @@ const QuizPage = () => {
                   <span className="text-2xl">🎯</span>
                   <div>
                     <h3 className="font-medium text-gray-900">Topics</h3>
-                    <p className="text-sm text-gray-600">Vocabulary, Hiragana, Numbers</p>
+                    <p className="text-sm text-gray-600">
+                      {topic ? topic : 'Vocabulary, Hiragana, Numbers'}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-start space-x-3">
@@ -311,10 +442,10 @@ const QuizPage = () => {
               Take Quiz Again
             </button>
             <button
-              onClick={() => window.location.reload()}
+              onClick={() => navigate('/flashcards')}
               className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg transition-all duration-200"
             >
-              Back to Home
+              Back to Flashcards
             </button>
           </div>
         </div>
@@ -333,7 +464,9 @@ const QuizPage = () => {
             <div className="flex items-center space-x-4">
               <span className="text-2xl">🧠</span>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Japanese Quiz</h1>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  {topic ? `${topic} Quiz` : 'Japanese Quiz'}
+                </h1>
                 <p className="text-sm text-gray-600">
                   Question {currentQuestion + 1} of {quizQuestions.length}
                 </p>

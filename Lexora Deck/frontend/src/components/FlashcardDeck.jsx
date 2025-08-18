@@ -1,8 +1,10 @@
 "use client"
 
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 
 const FlashcardDeck = () => {
+  const navigate = useNavigate()
   const [flippedCard, setFlippedCard] = useState(null)
   const [isCardFlipped, setIsCardFlipped] = useState(false)
   const [backCards, setBackCards] = useState([])
@@ -581,6 +583,18 @@ const FlashcardDeck = () => {
                 {!loading && backCards.length === 0 && (
                   <div className="flex items-center justify-center flex-1">
                     <p className="text-gray-300 text-center">No information found</p>
+                  </div>
+                )}
+
+                {/* Take Quiz Button */}
+                {flippedCard && !flippedCard.isSearchCard && (
+                  <div className="mt-4 text-center">
+                    <button
+                      onClick={() => navigate(`/quiz?topic=${encodeURIComponent(flippedCard.title)}`)}
+                      className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold py-2 px-6 rounded-lg transition-all duration-200 transform hover:scale-105 shadow-lg"
+                    >
+                      🧠 Take Quiz on {flippedCard.title}
+                    </button>
                   </div>
                 )}
 
