@@ -1,8 +1,10 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
+import { useNavigate } from "react-router-dom"
 
 const QuizPage = () => {
+  const navigate = useNavigate()
   const [currentQuestion, setCurrentQuestion] = useState(0)
   const [selectedAnswer, setSelectedAnswer] = useState(null)
   const [score, setScore] = useState(0)
@@ -11,106 +13,250 @@ const QuizPage = () => {
   const [timeLeft, setTimeLeft] = useState(30)
   const [quizStarted, setQuizStarted] = useState(false)
   const [userAnswers, setUserAnswers] = useState([])
+  const [quizQuestions, setQuizQuestions] = useState([])
+  const [loadingQuestions, setLoadingQuestions] = useState(false)
+  const [questionError, setQuestionError] = useState(null)
 
-  // Sample quiz questions (frontend only)
-  const quizQuestions = [
+  // Available flashcard topics to generate questions from
+  const flashcardTopics = [
+    { title: "Finance", category: "finance" },
+    { title: "Health Studies", category: "health" },
+    { title: "Random", category: "general" },
+    { title: "Coding", category: "technology" },
+    { title: "English", category: "language" },
+    { title: "Gym", category: "fitness" },
+    { title: "Book", category: "education" },
+    { title: "House Affordability", category: "finance" },
+    { title: "For car Enthuasists", category: "transportation" },
+    { title: "Food", category: "food" },
+  ]
+
+  // Function to generate quiz questions from flashcard data
+  const generateQuizQuestions = useCallback(async () => {
+    setLoadingQuestions(true)
+    setQuestionError(null)
+    
+    try {
+      const generatedQuestions = []
+      
+      // Select 3-5 random topics from flashcards to create diverse questions
+      const selectedTopics = flashcardTopics
+        .sort(() => 0.5 - Math.random())
+        .slice(0, Math.min(5, flashcardTopics.length))
+      
+      for (const topic of selectedTopics) {
+        try {
+          // Fetch flashcard data for this topic
+          const response = await fetch("/api/gemini/cards", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              cardName: topic.title,
+              category: topic.category,
+            }),
+          })
+
+          if (response.ok) {
+            const data = await response.json()
+            
+            // Generate 1-2 questions per topic from the returned data
+            if (data.points && data.points.length > 0) {
+              const questionsFromTopic = await generateQuestionsFromFlashcardData(
+                data.points, 
+                topic.title, 
+                topic.category,
+                Math.min(2, Math.ceil(8 / selectedTopics.length))
+              )
+              generatedQuestions.push(...questionsFromTopic)
+            }
+          }
+        } catch (topicError) {
+          console.error(`Error fetching data for topic ${topic.title}:`, topicError)
+          // Continue with other topics even if one fails
+        }
+      }
+      
+      // If we couldn't generate enough questions, add some fallback questions
+      if (generatedQuestions.length < 5) {
+        const fallbackQuestions = getFallbackQuestions()
+        generatedQuestions.push(...fallbackQuestions.slice(0, 8 - generatedQuestions.length))
+      }
+      
+      // Limit to 8 questions and shuffle
+      const finalQuestions = generatedQuestions
+        .slice(0, 8)
+        .sort(() => 0.5 - Math.random())
+      
+      setQuizQuestions(finalQuestions)
+    } catch (error) {
+      console.error("Error generating quiz questions:", error)
+      setQuestionError("Failed to generate quiz questions. Using fallback questions.")
+      // Use fallback questions if API fails
+      setQuizQuestions(getFallbackQuestions())
+    } finally {
+      setLoadingQuestions(false)
+    }
+  }, [flashcardTopics])
+
+  // Helper function to generate questions from flashcard data
+  const generateQuestionsFromFlashcardData = async (flashcardPoints, topicTitle, category, count) => {
+    const questions = []
+    const usedPoints = new Set()
+    
+    for (let i = 0; i < count && flashcardPoints.length > 0; i++) {
+      // Select a random point that hasn't been used
+      let pointIndex
+      do {
+        pointIndex = Math.floor(Math.random() * flashcardPoints.length)
+      } while (usedPoints.has(pointIndex) && usedPoints.size < flashcardPoints.length)
+      
+      if (usedPoints.has(pointIndex)) break // No more unique points available
+      
+      usedPoints.add(pointIndex)
+      const point = flashcardPoints[pointIndex]
+      
+      // Create a question from this flashcard point
+      const question = createQuestionFromPoint(point, topicTitle, category, questions.length + 1)
+      if (question) {
+        questions.push(question)
+      }
+    }
+    
+    return questions
+  }
+
+  // Helper function to create a question from a flashcard point
+  const createQuestionFromPoint = (point, topicTitle, category, id) => {
+    const questionTypes = ['definition', 'application', 'true-false']
+    const questionType = questionTypes[Math.floor(Math.random() * questionTypes.length)]
+    
+    switch (questionType) {
+      case 'definition': {
+        const correctAnswer = point.description.split('.')[0] + '.'
+        const wrongAnswers = [
+          generateWrongAnswer(category, 'definition'),
+          generateWrongAnswer(category, 'definition'),
+          generateWrongAnswer(category, 'definition')
+        ]
+        const allOptions = [correctAnswer, ...wrongAnswers]
+        const shuffledOptions = allOptions.sort(() => 0.5 - Math.random())
+        const correctIndex = shuffledOptions.indexOf(correctAnswer)
+        
+        return {
+          id,
+          question: `What is the main concept described in "${point.heading}" related to ${topicTitle}?`,
+          options: shuffledOptions,
+          correct: correctIndex,
+          explanation: `${point.heading}: ${point.description}`,
+          category: category,
+        }
+      }
+      
+      case 'application': {
+        const correctAppAnswer = extractKeyFact(point.description)
+        const wrongAppAnswers = [
+          generateWrongAnswer(category, 'application'),
+          generateWrongAnswer(category, 'application'),
+          generateWrongAnswer(category, 'application')
+        ]
+        const allAppOptions = [correctAppAnswer, ...wrongAppAnswers]
+        const shuffledAppOptions = allAppOptions.sort(() => 0.5 - Math.random())
+        const correctAppIndex = shuffledAppOptions.indexOf(correctAppAnswer)
+        
+        return {
+          id,
+          question: `According to the information about "${point.heading}", which statement is most accurate?`,
+          options: shuffledAppOptions,
+          correct: correctAppIndex,
+          explanation: `${point.heading}: ${point.description}`,
+          category: category,
+        }
+      }
+      
+      case 'true-false': {
+        const isTrue = Math.random() > 0.5
+        return {
+          id,
+          question: `True or False: ${point.heading} - ${extractKeyFact(point.description)}`,
+          options: ['True', 'False'],
+          correct: isTrue ? 0 : 1,
+          explanation: `${point.heading}: ${point.description}`,
+          category: category,
+        }
+      }
+      
+      default:
+        return null
+    }
+  }
+
+  // Helper function to extract key facts from descriptions
+  const extractKeyFact = (description) => {
+    const sentences = description.split('.').filter(s => s.trim().length > 10)
+    return sentences[0]?.trim() + '.' || description.substring(0, 100) + '...'
+  }
+
+  // Helper function to generate wrong answers
+  const generateWrongAnswer = (category) => {
+    const wrongAnswers = {
+      finance: ['Decreased market volatility', 'Reduced investment risk', 'Lower interest rates'],
+      health: ['Immediate symptom relief', 'No side effects', 'Instant cure'],
+      technology: ['Slower processing speed', 'Reduced functionality', 'No compatibility'],
+      education: ['Less learning retention', 'Decreased comprehension', 'No practical application'],
+      general: ['No significant impact', 'Completely unrelated', 'Not applicable'],
+    }
+    
+    const categoryAnswers = wrongAnswers[category] || wrongAnswers.general
+    return categoryAnswers[Math.floor(Math.random() * categoryAnswers.length)]
+  }
+
+  // Fallback questions if API fails
+  const getFallbackQuestions = () => [
     {
       id: 1,
-      question: "What does '自転車' mean in English?",
-      options: ["Car", "Bicycle", "Train", "Bus"],
+      question: "What is a key benefit of financial planning?",
+      options: ["Spending more money", "Better financial security", "Avoiding all investments", "Ignoring budgets"],
       correct: 1,
-      explanation: "'自転車' (jitensha) means bicycle in Japanese.",
-      category: "Transportation",
+      explanation: "Financial planning helps provide better financial security and stability.",
+      category: "Finance",
     },
     {
       id: 2,
-      question: "How do you say 'Thank you' in Japanese?",
-      options: ["Konnichiwa", "Sayonara", "Arigato", "Sumimasen"],
-      correct: 2,
-      explanation: "'ありがとう' (Arigato) means 'Thank you' in Japanese.",
-      category: "Greetings",
+      question: "Which is an important aspect of health studies?",
+      options: ["Ignoring symptoms", "Regular health monitoring", "Avoiding doctors", "Only emergency care"],
+      correct: 1,
+      explanation: "Regular health monitoring is crucial for maintaining good health.",
+      category: "Health",
     },
     {
       id: 3,
-      question: "What does '本' mean?",
-      options: ["Book", "House", "Food", "Money"],
-      correct: 0,
-      explanation: "'本' (hon) means book in Japanese.",
-      category: "Education",
+      question: "What is a fundamental concept in coding?",
+      options: ["Avoiding documentation", "Writing clear, maintainable code", "Using only one programming language", "Never testing code"],
+      correct: 1,
+      explanation: "Writing clear, maintainable code is essential for successful software development.",
+      category: "Technology",
     },
     {
       id: 4,
-      question: "Which hiragana represents the sound 'ka'?",
-      options: ["か", "き", "く", "け"],
-      correct: 0,
-      explanation: "'か' represents the sound 'ka' in hiragana.",
-      category: "Hiragana",
+      question: "What is a benefit of regular exercise?",
+      options: ["Increased fatigue", "Improved cardiovascular health", "Decreased energy", "Reduced strength"],
+      correct: 1,
+      explanation: "Regular exercise improves cardiovascular health and overall fitness.",
+      category: "Fitness",
     },
     {
       id: 5,
-      question: "What does '食べ物' mean?",
-      options: ["Drink", "Food", "Restaurant", "Kitchen"],
+      question: "Why is reading important?",
+      options: ["It wastes time", "It expands knowledge and vocabulary", "It causes eye strain", "It's only for entertainment"],
       correct: 1,
-      explanation: "'食べ物' (tabemono) means food in Japanese.",
-      category: "Food",
-    },
-    {
-      id: 6,
-      question: "How do you say 'Good morning' in Japanese?",
-      options: ["Konbanwa", "Ohayo gozaimasu", "Konnichiwa", "Oyasumi"],
-      correct: 1,
-      explanation: "'おはようございます' (Ohayo gozaimasu) means 'Good morning' in Japanese.",
-      category: "Greetings",
-    },
-    {
-      id: 7,
-      question: "What does '家' mean?",
-      options: ["School", "House", "Shop", "Park"],
-      correct: 1,
-      explanation: "'家' (ie/uchi) means house or home in Japanese.",
-      category: "Places",
-    },
-    {
-      id: 8,
-      question: "Which number is '三'?",
-      options: ["Two", "Three", "Four", "Five"],
-      correct: 1,
-      explanation: "'三' (san) means three in Japanese.",
-      category: "Numbers",
+      explanation: "Reading expands knowledge, improves vocabulary, and enhances cognitive abilities.",
+      category: "Education",
     },
   ]
 
-  // Timer effect
-  useEffect(() => {
-    let timer
-    if (quizStarted && !showResult && !quizCompleted && timeLeft > 0) {
-      timer = setTimeout(() => {
-        setTimeLeft(timeLeft - 1)
-      }, 1000)
-    } else if (timeLeft === 0 && !showResult) {
-      handleNextQuestion()
-    }
-    return () => clearTimeout(timer)
-  }, [timeLeft, quizStarted, showResult, quizCompleted])
-
-  const startQuiz = () => {
-    setQuizStarted(true)
-    setCurrentQuestion(0)
-    setScore(0)
-    setSelectedAnswer(null)
-    setShowResult(false)
-    setQuizCompleted(false)
-    setTimeLeft(30)
-    setUserAnswers([])
-  }
-
-  const handleAnswerSelect = (answerIndex) => {
-    if (selectedAnswer === null) {
-      setSelectedAnswer(answerIndex)
-    }
-  }
-
-  const handleNextQuestion = () => {
+  const handleNextQuestion = useCallback(() => {
     const currentQ = quizQuestions[currentQuestion]
     const isCorrect = selectedAnswer === currentQ.correct
 
@@ -142,6 +288,41 @@ const QuizPage = () => {
         setQuizCompleted(true)
       }
     }, 2000)
+  }, [quizQuestions, currentQuestion, selectedAnswer, userAnswers, score])
+
+  // Generate quiz questions on component mount
+  useEffect(() => {
+    generateQuizQuestions()
+  }, [])
+
+  // Timer effect
+  useEffect(() => {
+    let timer
+    if (quizStarted && !showResult && !quizCompleted && timeLeft > 0) {
+      timer = setTimeout(() => {
+        setTimeLeft(timeLeft - 1)
+      }, 1000)
+    } else if (timeLeft === 0 && !showResult) {
+      handleNextQuestion()
+    }
+    return () => clearTimeout(timer)
+  }, [timeLeft, quizStarted, showResult, quizCompleted, handleNextQuestion])
+
+  const startQuiz = () => {
+    setQuizStarted(true)
+    setCurrentQuestion(0)
+    setScore(0)
+    setSelectedAnswer(null)
+    setShowResult(false)
+    setQuizCompleted(false)
+    setTimeLeft(30)
+    setUserAnswers([])
+  }
+
+  const handleAnswerSelect = (answerIndex) => {
+    if (selectedAnswer === null) {
+      setSelectedAnswer(answerIndex)
+    }
   }
 
   const resetQuiz = () => {
@@ -153,6 +334,8 @@ const QuizPage = () => {
     setQuizCompleted(false)
     setTimeLeft(30)
     setUserAnswers([])
+    // Generate new questions for next quiz
+    generateQuizQuestions()
   }
 
   const getScoreColor = () => {
@@ -179,49 +362,78 @@ const QuizPage = () => {
             <div className="mb-8">
               <span className="text-8xl">🧠</span>
             </div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-4">Japanese Quiz Challenge</h1>
-            <p className="text-lg text-gray-600 mb-8">Test your Japanese knowledge with our interactive quiz!</p>
+            <h1 className="text-4xl font-bold text-gray-900 mb-4">Quiz Challenge</h1>
+            <p className="text-lg text-gray-600 mb-8">Test your knowledge with our interactive quiz based on flashcard topics!</p>
 
-            <div className="bg-white rounded-lg shadow-lg p-8 mb-8 max-w-2xl mx-auto">
-              <h2 className="text-2xl font-semibold text-gray-900 mb-6">Quiz Rules</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
-                <div className="flex items-start space-x-3">
-                  <span className="text-2xl">📝</span>
-                  <div>
-                    <h3 className="font-medium text-gray-900">Questions</h3>
-                    <p className="text-sm text-gray-600">{quizQuestions.length} multiple choice questions</p>
-                  </div>
-                </div>
-                <div className="flex items-start space-x-3">
-                  <span className="text-2xl">⏰</span>
-                  <div>
-                    <h3 className="font-medium text-gray-900">Time Limit</h3>
-                    <p className="text-sm text-gray-600">30 seconds per question</p>
-                  </div>
-                </div>
-                <div className="flex items-start space-x-3">
-                  <span className="text-2xl">🎯</span>
-                  <div>
-                    <h3 className="font-medium text-gray-900">Topics</h3>
-                    <p className="text-sm text-gray-600">Vocabulary, Hiragana, Numbers</p>
-                  </div>
-                </div>
-                <div className="flex items-start space-x-3">
-                  <span className="text-2xl">🏆</span>
-                  <div>
-                    <h3 className="font-medium text-gray-900">Scoring</h3>
-                    <p className="text-sm text-gray-600">1 point per correct answer</p>
-                  </div>
+            {loadingQuestions && (
+              <div className="bg-white rounded-lg shadow-lg p-8 mb-8 max-w-2xl mx-auto">
+                <div className="flex items-center justify-center space-x-3">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                  <p className="text-gray-600">Generating questions from flashcard topics...</p>
                 </div>
               </div>
-            </div>
+            )}
 
-            <button
-              onClick={startQuiz}
-              className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold py-4 px-8 rounded-lg text-xl transition-all duration-200 transform hover:scale-105 shadow-lg"
-            >
-              Start Quiz 🚀
-            </button>
+            {questionError && (
+              <div className="bg-white rounded-lg shadow-lg p-8 mb-8 max-w-2xl mx-auto">
+                <div className="text-red-600 mb-4">
+                  <span className="text-3xl">⚠️</span>
+                </div>
+                <p className="text-red-600 mb-4">{questionError}</p>
+                <button
+                  onClick={generateQuizQuestions}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
+                >
+                  Try Again
+                </button>
+              </div>
+            )}
+
+            {!loadingQuestions && !questionError && (
+              <>
+                <div className="bg-white rounded-lg shadow-lg p-8 mb-8 max-w-2xl mx-auto">
+                  <h2 className="text-2xl font-semibold text-gray-900 mb-6">Quiz Rules</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
+                    <div className="flex items-start space-x-3">
+                      <span className="text-2xl">📝</span>
+                      <div>
+                        <h3 className="font-medium text-gray-900">Questions</h3>
+                        <p className="text-sm text-gray-600">{quizQuestions.length} multiple choice questions</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <span className="text-2xl">⏰</span>
+                      <div>
+                        <h3 className="font-medium text-gray-900">Time Limit</h3>
+                        <p className="text-sm text-gray-600">30 seconds per question</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <span className="text-2xl">🎯</span>
+                      <div>
+                        <h3 className="font-medium text-gray-900">Topics</h3>
+                        <p className="text-sm text-gray-600">Based on your flashcard topics</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start space-x-3">
+                      <span className="text-2xl">🏆</span>
+                      <div>
+                        <h3 className="font-medium text-gray-900">Scoring</h3>
+                        <p className="text-sm text-gray-600">1 point per correct answer</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  onClick={startQuiz}
+                  disabled={quizQuestions.length === 0}
+                  className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed text-white font-bold py-4 px-8 rounded-lg text-xl transition-all duration-200 transform hover:scale-105 disabled:transform-none"
+                >
+                  {quizQuestions.length === 0 ? 'Preparing Quiz...' : `Start Quiz (${quizQuestions.length} Questions)`}
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -311,7 +523,7 @@ const QuizPage = () => {
               Take Quiz Again
             </button>
             <button
-              onClick={() => window.location.reload()}
+              onClick={() => navigate('/home')}
               className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg transition-all duration-200"
             >
               Back to Home

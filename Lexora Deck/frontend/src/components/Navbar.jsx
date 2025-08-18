@@ -1,20 +1,20 @@
 import React, { useState } from 'react';
-import { Menu, X, Home, User, Settings, Mail, Search, Award, Layers, BookOpen } from 'lucide-react';
+import { NavLink } from 'react-router-dom';
+import { Menu, X, Home, User, Award, Layers, BookOpen } from 'lucide-react';
 import logo from '../assets/logo.jpg'
 
-const Navbar = ({ currentPage, onPageChange }) => {
+const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
 
   const navItems = [
-    { name: 'Home', page: 'home', icon: Home },
-    { name: 'Deck', page: 'flashcards', icon: Layers },
-    { name: 'Quiz', page: 'quiz', icon: BookOpen },
-    { name: 'Leaderboard', page: 'leaderboard', icon: Award },
-    { name: 'Profile', page: 'profile', icon: User },
+    { name: 'Home', path: '/home', icon: Home },
+    { name: 'Deck', path: '/flashcards', icon: Layers },
+    { name: 'Quiz', path: '/quiz', icon: BookOpen },
+    { name: 'Leaderboard', path: '/leaderboard', icon: Award },
+    { name: 'Profile', path: '/profile', icon: User },
   ];
 
-  const handleNavClick = (page) => {
-    onPageChange(page);
+  const handleNavClick = () => {
     setIsOpen(false); // Close mobile menu when item is clicked
   };
 
@@ -35,20 +35,21 @@ const Navbar = ({ currentPage, onPageChange }) => {
             <div className="ml-10 flex items-baseline space-x-4">
               {navItems.map((item) => {
                 const Icon = item.icon;
-                const isActive = currentPage === item.page;
                 return (
-                  <button
+                  <NavLink
                     key={item.name}
-                    onClick={() => handleNavClick(item.page)}
-                    className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
-                      isActive
-                        ? 'text-blue-600 bg-blue-50 border-b-2 border-blue-600'
-                        : 'text-gray-700 hover:text-blue-600 hover:bg-blue-50'
-                    }`}
+                    to={item.path}
+                    className={({ isActive }) =>
+                      `flex items-center px-3 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                        isActive
+                          ? 'text-blue-600 bg-blue-50 border-b-2 border-blue-600'
+                          : 'text-gray-700 hover:text-blue-600 hover:bg-blue-50'
+                      }`
+                    }
                   >
                     <Icon className="w-4 h-4 mr-2" />
                     {item.name}
-                  </button>
+                  </NavLink>
                 );
               })}
             </div>
@@ -72,20 +73,22 @@ const Navbar = ({ currentPage, onPageChange }) => {
           <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3 bg-white border-t border-gray-200">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const isActive = currentPage === item.page;
               return (
-                <button
+                <NavLink
                   key={item.name}
-                  onClick={() => handleNavClick(item.page)}
-                  className={`w-full text-left flex items-center px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
-                    isActive
-                      ? 'text-blue-600 bg-blue-50'
-                      : 'text-gray-700 hover:text-blue-600 hover:bg-blue-50'
-                  }`}
+                  to={item.path}
+                  onClick={handleNavClick}
+                  className={({ isActive }) =>
+                    `w-full text-left flex items-center px-3 py-2 rounded-md text-base font-medium transition-all duration-200 ${
+                      isActive
+                        ? 'text-blue-600 bg-blue-50'
+                        : 'text-gray-700 hover:text-blue-600 hover:bg-blue-50'
+                    }`
+                  }
                 >
                   <Icon className="w-4 h-4 mr-3" />
                   {item.name}
-                </button>
+                </NavLink>
               );
             })}
           </div>

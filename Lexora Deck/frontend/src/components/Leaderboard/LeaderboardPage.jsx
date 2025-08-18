@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useAuth } from "../../contexts/AuthContext"
 
 const LeaderboardPage = () => {
@@ -13,7 +13,7 @@ const LeaderboardPage = () => {
     fetchLeaderboard()
   }, [])
 
-  const fetchLeaderboard = async () => {
+  const fetchLeaderboard = useCallback(async () => {
     try {
       setLoading(true)
       const response = await fetch("/api/leaderboard", {
@@ -24,7 +24,9 @@ const LeaderboardPage = () => {
 
       if (response.ok) {
         const data = await response.json()
-        setLeaderboard(data.leaderboard)
+        // Sanitize leaderboard data to handle NaN/missing values
+        const sanitizedLeaderboard = sanitizeLeaderboardData(data.leaderboard || [])
+        setLeaderboard(sanitizedLeaderboard)
       } else {
         setError("Failed to load leaderboard")
       }
@@ -34,14 +36,43 @@ const LeaderboardPage = () => {
     } finally {
       setLoading(false)
     }
+  }, [token])
+
+  // Helper function to sanitize leaderboard data
+  const sanitizeLeaderboardData = (data) => {
+    return data.map((user, index) => ({
+      ...user,
+      id: user.id || `user-${index}`,
+      name: user.name || 'Anonymous User',
+      total_points: isNaN(Number(user.total_points)) ? 0 : Number(user.total_points),
+      unique_cards_studied: isNaN(Number(user.unique_cards_studied)) ? 0 : Number(user.unique_cards_studied),
+      total_cards_viewed: isNaN(Number(user.total_cards_viewed)) ? 0 : Number(user.total_cards_viewed),
+      rank: isNaN(Number(user.rank)) ? index + 1 : Number(user.rank),
+      level: user.level || { level: 1, name: 'Beginner' },
+      badge: user.badge || { emoji: '🔰', color: 'text-gray-500' },
+      created_at: user.created_at || new Date().toISOString(),
+    }))
+  }
+
+  // Helper function to safely calculate totals
+  const safeSum = (arr, field) => {
+    return arr.reduce((sum, user) => {
+      const value = user[field]
+      return sum + (isNaN(Number(value)) ? 0 : Number(value))
+    }, 0)
   }
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-    })
+    try {
+      return new Date(dateString).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    } catch (error) {
+      console.error('Date formatting error:', error)
+      return 'Unknown'
+    }
   }
 
   const getRankStyle = (rank) => {
@@ -98,14 +129,14 @@ const LeaderboardPage = () => {
           <div className="bg-white rounded-lg shadow-md p-6 text-center">
             <div className="text-3xl mb-2">🎯</div>
             <div className="text-2xl font-bold text-gray-900">
-              {leaderboard.reduce((sum, user) => sum + user.total_cards_viewed, 0)}
+              {safeSum(leaderboard, 'total_cards_viewed')}
             </div>
             <div className="text-sm text-gray-600">Cards Studied</div>
           </div>
           <div className="bg-white rounded-lg shadow-md p-6 text-center">
             <div className="text-3xl mb-2">⭐</div>
             <div className="text-2xl font-bold text-gray-900">
-              {leaderboard.reduce((sum, user) => sum + user.total_points, 0)}
+              {safeSum(leaderboard, 'total_points')}
             </div>
             <div className="text-sm text-gray-600">Total Points</div>
           </div>
@@ -161,7 +192,7 @@ const LeaderboardPage = () => {
             <h2 className="text-xl font-semibold text-gray-900">Full Rankings</h2>
           </div>
           <div className="divide-y divide-gray-200">
-            {leaderboard.map((userEntry, index) => (
+            {leaderboard.map((userEntry) => (
               <div
                 key={userEntry.id}
                 className={`px-6 py-4 hover:bg-gray-50 transition-colors ${

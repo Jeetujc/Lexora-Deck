@@ -1,5 +1,5 @@
 "use client"
-import { useState } from "react"
+import { Routes, Route, Navigate } from "react-router-dom"
 import { AuthProvider, useAuth } from "./contexts/AuthContext"
 import AuthPage from "./components/Auth/AuthPage"
 import Navbar from "./components/Navbar"
@@ -11,7 +11,6 @@ import Home from "./pages/Home"
 
 function AppContent() {
   const { user, loading } = useAuth()
-  const [currentPage, setCurrentPage] = useState("flashcards")
 
   if (loading) {
     return (
@@ -28,25 +27,17 @@ function AppContent() {
     return <AuthPage />
   }
 
-  const renderCurrentPage = () => {
-    switch (currentPage) {
-      case "home" :
-        return <Home/>
-      case "flashcards":
-        return <FlashcardDeck />
-      case "quiz":
-        return <QuizPage />
-      case "leaderboard":
-        return <LeaderboardPage />
-      default:
-        return <Home />
-    }
-  }
-
   return (
     <div className="App min-h-screen bg-gray-50">
-      <Navbar currentPage={currentPage} onPageChange={setCurrentPage} />
-      {renderCurrentPage()}
+      <Navbar />
+      <Routes>
+        <Route path="/" element={<Navigate to="/flashcards" replace />} />
+        <Route path="/home" element={<Home />} />
+        <Route path="/flashcards" element={<FlashcardDeck />} />
+        <Route path="/quiz" element={<QuizPage />} />
+        <Route path="/leaderboard" element={<LeaderboardPage />} />
+        <Route path="*" element={<Navigate to="/flashcards" replace />} />
+      </Routes>
     </div>
   )
 }
