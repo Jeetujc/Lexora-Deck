@@ -1,5 +1,6 @@
 "use client"
-import { AuthProvider, useAuth } from "../contexts/AuthContext"
+import { AuthProvider } from "../contexts/AuthContext"
+import { useAuth } from "../contexts/useAuth"
 import AuthPage from "../components/Auth/AuthPage"
 
 function AppContent() {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useMemo } from "react"
 
 const QuizPage = () => {
   const [currentQuestion, setCurrentQuestion] = useState(0)
@@ -12,8 +12,8 @@ const QuizPage = () => {
   const [quizStarted, setQuizStarted] = useState(false)
   const [userAnswers, setUserAnswers] = useState([])
 
-  // Sample quiz questions (frontend only)
-  const quizQuestions = [
+  // Sample quiz questions (frontend only) - will be replaced with dynamic questions
+  const quizQuestions = useMemo(() => [
     {
       id: 1,
       question: "What does '自転車' mean in English?",
@@ -78,7 +78,7 @@ const QuizPage = () => {
       explanation: "'三' (san) means three in Japanese.",
       category: "Numbers",
     },
-  ]
+  ], [])
 
   // Timer effect
   useEffect(() => {
@@ -91,7 +91,7 @@ const QuizPage = () => {
       handleNextQuestion()
     }
     return () => clearTimeout(timer)
-  }, [timeLeft, quizStarted, showResult, quizCompleted])
+  }, [timeLeft, quizStarted, showResult, quizCompleted, handleNextQuestion])
 
   const startQuiz = () => {
     setQuizStarted(true)
@@ -110,7 +110,7 @@ const QuizPage = () => {
     }
   }
 
-  const handleNextQuestion = () => {
+  const handleNextQuestion = useCallback(() => {
     const currentQ = quizQuestions[currentQuestion]
     const isCorrect = selectedAnswer === currentQ.correct
 
@@ -124,17 +124,17 @@ const QuizPage = () => {
       explanation: currentQ.explanation,
     }
 
-    setUserAnswers([...userAnswers, newAnswer])
+    setUserAnswers(prev => [...prev, newAnswer])
 
     if (isCorrect) {
-      setScore(score + 1)
+      setScore(prev => prev + 1)
     }
 
     setShowResult(true)
 
     setTimeout(() => {
       if (currentQuestion + 1 < quizQuestions.length) {
-        setCurrentQuestion(currentQuestion + 1)
+        setCurrentQuestion(prev => prev + 1)
         setSelectedAnswer(null)
         setShowResult(false)
         setTimeLeft(30)
@@ -142,7 +142,7 @@ const QuizPage = () => {
         setQuizCompleted(true)
       }
     }, 2000)
-  }
+  }, [currentQuestion, selectedAnswer, quizQuestions])
 
   const resetQuiz = () => {
     setQuizStarted(false)

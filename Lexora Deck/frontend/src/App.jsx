@@ -1,6 +1,7 @@
 "use client"
 import { useState } from "react"
-import { AuthProvider, useAuth } from "./contexts/AuthContext"
+import { AuthProvider } from "./contexts/AuthContext"
+import { useAuth } from "./contexts/useAuth"
 import AuthPage from "./components/Auth/AuthPage"
 import Navbar from "./components/Navbar"
 import FlashcardDeck from "./components/FlashcardDeck"

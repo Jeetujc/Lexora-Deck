@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { useNavigate } from "react-router-dom" // ✅ For redirection
-import { useAuth } from "../../contexts/AuthContext"
+import { useAuth } from "../../contexts/useAuth"
 import logo from "../../assets/logo.jpg"
 
 const LoginForm = ({ onSwitchToRegister }) => {

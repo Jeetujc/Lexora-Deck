@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { useAuth } from "../../contexts/AuthContext"
+import { useState, useEffect, useCallback } from "react"
+import { useAuth } from "../../contexts/useAuth"
 
 const LeaderboardPage = () => {
   const [leaderboard, setLeaderboard] = useState([])
@@ -9,11 +9,7 @@ const LeaderboardPage = () => {
   const [error, setError] = useState(null)
   const { user, token } = useAuth()
 
-  useEffect(() => {
-    fetchLeaderboard()
-  }, [])
-
-  const fetchLeaderboard = async () => {
+  const fetchLeaderboard = useCallback(async () => {
     try {
       setLoading(true)
       const response = await fetch("/api/leaderboard", {
@@ -34,7 +30,11 @@ const LeaderboardPage = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [token])
+
+  useEffect(() => {
+    fetchLeaderboard()
+  }, [fetchLeaderboard])
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -161,7 +161,7 @@ const LeaderboardPage = () => {
             <h2 className="text-xl font-semibold text-gray-900">Full Rankings</h2>
           </div>
           <div className="divide-y divide-gray-200">
-            {leaderboard.map((userEntry, index) => (
+            {leaderboard.map((userEntry) => (
               <div
                 key={userEntry.id}
                 className={`px-6 py-4 hover:bg-gray-50 transition-colors ${
