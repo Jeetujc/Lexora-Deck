@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useAuth } from "../../contexts/AuthContext"
 
 const LeaderboardPage = () => {
@@ -9,13 +9,10 @@ const LeaderboardPage = () => {
   const [error, setError] = useState(null)
   const { user, token } = useAuth()
 
-  useEffect(() => {
-    fetchLeaderboard()
-  }, [])
-
-  const fetchLeaderboard = async () => {
+  const fetchLeaderboard = useCallback(async () => {
     try {
       setLoading(true)
+      setError(null)
       const response = await fetch("/api/leaderboard", {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -24,17 +21,24 @@ const LeaderboardPage = () => {
 
       if (response.ok) {
         const data = await response.json()
-        setLeaderboard(data.leaderboard)
+        setLeaderboard(data.leaderboard || [])
       } else {
-        setError("Failed to load leaderboard")
+        const errorData = await response.json().catch(() => ({}))
+        setError(errorData.error || "Failed to load leaderboard")
       }
     } catch (err) {
       console.error("Leaderboard fetch error:", err)
-      setError("Network error. Please try again.")
+      setError("Network error. Please check your connection and try again.")
     } finally {
       setLoading(false)
     }
-  }
+  }, [token])
+
+  useEffect(() => {
+    if (token) {
+      fetchLeaderboard()
+    }
+  }, [fetchLeaderboard, token])
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString("en-US", {
@@ -161,7 +165,7 @@ const LeaderboardPage = () => {
             <h2 className="text-xl font-semibold text-gray-900">Full Rankings</h2>
           </div>
           <div className="divide-y divide-gray-200">
-            {leaderboard.map((userEntry, index) => (
+            {leaderboard.map((userEntry) => (
               <div
                 key={userEntry.id}
                 className={`px-6 py-4 hover:bg-gray-50 transition-colors ${

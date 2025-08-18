@@ -1,6 +1,8 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
+import { useNavigate } from "react-router-dom"
+import { useAuth } from "../../contexts/AuthContext"
 
 const QuizPage = () => {
   const [currentQuestion, setCurrentQuestion] = useState(0)
@@ -11,9 +13,72 @@ const QuizPage = () => {
   const [timeLeft, setTimeLeft] = useState(30)
   const [quizStarted, setQuizStarted] = useState(false)
   const [userAnswers, setUserAnswers] = useState([])
+  const [quizQuestions, setQuizQuestions] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [startTime, setStartTime] = useState(null)
+  
+  const navigate = useNavigate()
+  const { token } = useAuth()
 
-  // Sample quiz questions (frontend only)
-  const quizQuestions = [
+  // Fetch quiz questions from API
+  const fetchQuizQuestions = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const response = await fetch("/api/quiz/questions")
+      
+      if (response.ok) {
+        const data = await response.json()
+        setQuizQuestions(data.questions || [])
+      } else {
+        throw new Error("Failed to load quiz questions")
+      }
+    } catch (err) {
+      console.error("Quiz questions fetch error:", err)
+      setError("Failed to load quiz questions. Please try again.")
+      // Fallback to default questions
+      setQuizQuestions(getDefaultQuestions())
+    } finally {
+      setLoading(false)
+    }
+  useEffect(() => {
+    fetchQuizQuestions()
+  }, [fetchQuizQuestions])
+
+  // Submit quiz results
+  const submitQuizResults = useCallback(async (finalScore, finalAnswers) => {
+    if (!token) return
+
+    try {
+      const timeTaken = startTime ? Math.floor((Date.now() - startTime) / 1000) : 0
+      const response = await fetch("/api/quiz/results", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          score: finalScore,
+          totalQuestions: quizQuestions.length,
+          timeTaken,
+          answers: finalAnswers,
+        }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        console.log("Quiz results saved:", data)
+      } else {
+        console.error("Failed to save quiz results")
+      }
+    } catch (err) {
+      console.error("Error submitting quiz results:", err)
+    }
+  }, [token, quizQuestions.length, startTime])
+
+  // Default questions as fallback
+  const getDefaultQuestions = () => [
     {
       id: 1,
       question: "What does '自転車' mean in English?",
@@ -81,36 +146,9 @@ const QuizPage = () => {
   ]
 
   // Timer effect
-  useEffect(() => {
-    let timer
-    if (quizStarted && !showResult && !quizCompleted && timeLeft > 0) {
-      timer = setTimeout(() => {
-        setTimeLeft(timeLeft - 1)
-      }, 1000)
-    } else if (timeLeft === 0 && !showResult) {
-      handleNextQuestion()
-    }
-    return () => clearTimeout(timer)
-  }, [timeLeft, quizStarted, showResult, quizCompleted])
-
-  const startQuiz = () => {
-    setQuizStarted(true)
-    setCurrentQuestion(0)
-    setScore(0)
-    setSelectedAnswer(null)
-    setShowResult(false)
-    setQuizCompleted(false)
-    setTimeLeft(30)
-    setUserAnswers([])
-  }
-
-  const handleAnswerSelect = (answerIndex) => {
-    if (selectedAnswer === null) {
-      setSelectedAnswer(answerIndex)
-    }
-  }
-
-  const handleNextQuestion = () => {
+  const handleNextQuestion = useCallback(() => {
+    if (!quizQuestions.length) return
+    
     const currentQ = quizQuestions[currentQuestion]
     const isCorrect = selectedAnswer === currentQ.correct
 
@@ -124,7 +162,8 @@ const QuizPage = () => {
       explanation: currentQ.explanation,
     }
 
-    setUserAnswers([...userAnswers, newAnswer])
+    const updatedAnswers = [...userAnswers, newAnswer]
+    setUserAnswers(updatedAnswers)
 
     if (isCorrect) {
       setScore(score + 1)
@@ -140,8 +179,44 @@ const QuizPage = () => {
         setTimeLeft(30)
       } else {
         setQuizCompleted(true)
+        // Submit results when quiz is completed
+        submitQuizResults(score + (isCorrect ? 1 : 0), updatedAnswers)
       }
     }, 2000)
+  }, [currentQuestion, selectedAnswer, userAnswers, score, quizQuestions, submitQuizResults])
+
+  useEffect(() => {
+    let timer
+    if (quizStarted && !showResult && !quizCompleted && timeLeft > 0) {
+      timer = setTimeout(() => {
+        setTimeLeft(timeLeft - 1)
+      }, 1000)
+    } else if (timeLeft === 0 && !showResult) {
+      handleNextQuestion()
+    }
+    return () => clearTimeout(timer)
+  }, [timeLeft, quizStarted, showResult, quizCompleted, handleNextQuestion])
+
+  const startQuiz = () => {
+    if (!quizQuestions.length) {
+      setError("No quiz questions available")
+      return
+    }
+    setQuizStarted(true)
+    setStartTime(Date.now())
+    setCurrentQuestion(0)
+    setScore(0)
+    setSelectedAnswer(null)
+    setShowResult(false)
+    setQuizCompleted(false)
+    setTimeLeft(30)
+    setUserAnswers([])
+  }
+
+  const handleAnswerSelect = (answerIndex) => {
+    if (selectedAnswer === null) {
+      setSelectedAnswer(answerIndex)
+    }
   }
 
   const resetQuiz = () => {
@@ -153,6 +228,7 @@ const QuizPage = () => {
     setQuizCompleted(false)
     setTimeLeft(30)
     setUserAnswers([])
+    setStartTime(null)
   }
 
   const getScoreColor = () => {
@@ -169,6 +245,50 @@ const QuizPage = () => {
     if (percentage >= 70) return "Good work! 👍"
     if (percentage >= 60) return "Not bad! 📚"
     return "Keep studying! 💪"
+  }
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100 py-8">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-purple-600 mx-auto mb-4"></div>
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Loading Quiz Questions...</h2>
+            <p className="text-gray-600">Please wait while we prepare your quiz</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-50 to-pink-100 py-8">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center">
+            <div className="text-red-500 text-6xl mb-4">⚠️</div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Quiz Loading Error</h2>
+            <p className="text-gray-600 mb-6">{error}</p>
+            <div className="space-x-4">
+              <button
+                onClick={fetchQuizQuestions}
+                className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg transition-colors"
+              >
+                Try Again
+              </button>
+              <button
+                onClick={() => navigate('/home')}
+                className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg transition-colors"
+              >
+                Back to Home
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   if (!quizStarted) {
@@ -311,7 +431,13 @@ const QuizPage = () => {
               Take Quiz Again
             </button>
             <button
-              onClick={() => window.location.reload()}
+              onClick={() => navigate('/leaderboard')}
+              className="bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg transition-all duration-200"
+            >
+              View Leaderboard
+            </button>
+            <button
+              onClick={() => navigate('/home')}
               className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg transition-all duration-200"
             >
               Back to Home
@@ -323,6 +449,27 @@ const QuizPage = () => {
   }
 
   const currentQ = quizQuestions[currentQuestion]
+  
+  // Safety check for current question
+  if (!currentQ) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-50 to-pink-100 py-8">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center">
+            <div className="text-red-500 text-6xl mb-4">⚠️</div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">Quiz Error</h2>
+            <p className="text-gray-600 mb-6">Unable to load quiz question. Please try again.</p>
+            <button
+              onClick={resetQuiz}
+              className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-lg transition-colors"
+            >
+              Restart Quiz
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-100 py-8">

@@ -1,32 +1,14 @@
 "use client"
 
-import { createContext, useContext, useState, useEffect } from "react"
+import { useState, useEffect } from "react"
+import AuthContext from "./authUtils"
 
-const AuthContext = createContext()
-
-export const useAuth = () => {
-  const context = useContext(AuthContext)
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider")
-  }
-  return context
-}
+export { useAuth } from "./authUtils"
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
   const [token, setToken] = useState(null)
-
-  useEffect(() => {
-    // Check for stored token on app load
-    const storedToken = localStorage.getItem("token")
-    if (storedToken) {
-      setToken(storedToken)
-      verifyToken(storedToken)
-    } else {
-      setLoading(false)
-    }
-  }, [])
 
   const verifyToken = async (tokenToVerify) => {
     try {
@@ -55,6 +37,17 @@ export const AuthProvider = ({ children }) => {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    // Check for stored token on app load
+    const storedToken = localStorage.getItem("token")
+    if (storedToken) {
+      setToken(storedToken)
+      verifyToken(storedToken)
+    } else {
+      setLoading(false)
+    }
+  }, [])
 
   const login = async (email, password) => {
     try {
