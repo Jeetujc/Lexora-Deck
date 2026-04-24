@@ -2,9 +2,12 @@
 
 import { useState, useEffect } from "react"
 import { useAuth } from "../../contexts/AuthContext"
+import { useToast } from "../../hooks/useToast"
+import Toast from "../Toast"
 
 const ProfilePage = ({ onPageChange }) => {
   const { user, token, logout } = useAuth()
+  const { toasts, toast, dismiss } = useToast()
   const [stats, setStats] = useState({
     points: 0,
     streak: 0,
@@ -72,7 +75,7 @@ const ProfilePage = ({ onPageChange }) => {
     const updated = [...savedDecks, deckData]
     setSavedDecks(updated)
     localStorage.setItem("savedDecks", JSON.stringify(updated))
-    alert("Deck saved successfully! 🎉")
+    toast({ message: "Deck saved successfully! 🎉", type: "success" })
   }
 
   const handleDeleteNote = (id) => {
@@ -146,6 +149,7 @@ const ProfilePage = ({ onPageChange }) => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 py-8 px-4">
+      <Toast toasts={toasts} dismiss={dismiss} />
       <div className="max-w-4xl mx-auto">
         {/* Profile Header Card */}
         <div className="bg-white rounded-3xl shadow-xl overflow-hidden mb-8">

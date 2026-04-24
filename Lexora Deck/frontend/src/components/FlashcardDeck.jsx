@@ -1,7 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useAuth } from "../contexts/AuthContext"
+import { useToast } from "../hooks/useToast"
+import Toast from "./Toast"
 
 const FlashcardDeck = () => {
   const [flippedCard, setFlippedCard] = useState(null)
@@ -9,11 +11,14 @@ const FlashcardDeck = () => {
   const [backCards, setBackCards] = useState([])
   const [currentBackCardIndex, setCurrentBackCardIndex] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [loadingMessage, setLoadingMessage] = useState("Generating content...")
   const [error, setError] = useState(null)
   const [userInput, setUserInput] = useState("")
   const [showInputModal, setShowInputModal] = useState(false)
+  const [lastFetchArgs, setLastFetchArgs] = useState(null)
 
   const { token } = useAuth()
+  const { toasts, toast, dismiss } = useToast()
 
   const cards = [
     // First row (3 cards)
@@ -115,65 +120,55 @@ const FlashcardDeck = () => {
     setLoading(true)
     setError(null)
     setCurrentBackCardIndex(0)
+    setLastFetchArgs({ cardId, category, cardTitle })
+
+    const loadingMessages = [
+      "Generating content with Gemini AI…",
+      "Still working, almost there…",
+      "Finalising your cards…",
+    ]
+    let msgIdx = 0
+    setLoadingMessage(loadingMessages[0])
+    const msgTimer = setInterval(() => {
+      msgIdx = Math.min(msgIdx + 1, loadingMessages.length - 1)
+      setLoadingMessage(loadingMessages[msgIdx])
+    }, 4000)
 
     try {
       console.log("🚀 Fetching data for:", { cardTitle, category })
 
-      // API call to Next.js backend (will be proxied by Vite)
       const response = await fetch("/api/gemini/cards", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          cardName: cardTitle,
-          category: category,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cardName: cardTitle, category }),
       })
 
-      console.log("📡 Response status:", response.status)
-      console.log("📡 Response ok:", response.ok)
-
-      // First check if the response is ok
       if (!response.ok) {
         const errorText = await response.text()
-        console.error("❌ Error response:", errorText)
         throw new Error(`API Error (${response.status}): ${errorText || "Unknown error"}`)
       }
 
-      // Safely parse the JSON response
-      let data
-      try {
-        const responseText = await response.text()
-        console.log("📄 Response text length:", responseText.length)
-        console.log("📄 Response text preview:", responseText.substring(0, 100) + "...")
+      const responseText = await response.text()
+      if (!responseText || responseText.trim() === "") throw new Error("Empty response from server")
 
-        if (!responseText || responseText.trim() === "") {
-          throw new Error("Empty response from server")
-        }
+      const data = JSON.parse(responseText)
 
-        data = JSON.parse(responseText)
-        console.log("✅ Parsed data:", data)
-      } catch (parseError) {
-        console.error("❌ JSON parse error:", parseError)
-        throw new Error(`Failed to parse response: ${parseError.message}`)
-      }
-
-      // Handle both successful and fallback responses
       if (data.points && Array.isArray(data.points)) {
         setBackCards(data.points)
-        if (data.fallback || data.error) {
-          setError(`Note: ${data.error || "Using fallback data - API temporarily unavailable"}`)
+        if (data.fromCache) {
+          toast({ message: "Loaded from cache ⚡", type: "info", duration: 2000 })
         }
-
-        // Record this card view in user progress (fire-and-forget)
+        if (data.fallback) {
+          setError("AI service temporarily unavailable — showing placeholder content.")
+        }
+        // Track card views
+        const viewed = parseInt(localStorage.getItem("cardsReviewed") || "0") + 1
+        localStorage.setItem("cardsReviewed", String(viewed))
+        // Record progress in backend (fire-and-forget)
         if (token) {
           fetch("/api/progress/update", {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
             body: JSON.stringify({ cardName: cardTitle, category }),
           }).catch((err) => console.error("Progress update failed:", err))
         }
@@ -182,40 +177,14 @@ const FlashcardDeck = () => {
       }
     } catch (err) {
       console.error("❌ Error fetching cards:", err)
-      setError(`Failed to load information: ${err.message}`)
-
-      // Fallback to local sample data if everything fails
-      const fallbackData = [
-        {
-          heading: `About ${cardTitle}`,
-          description: `${cardTitle} is a ${category} related term. This is sample data shown when the API is unavailable. Normally, this would display detailed information from Gemini AI.`,
-        },
-        {
-          heading: "General Usage",
-          description: `${cardTitle} is commonly used in daily life. This sample content demonstrates how the information would be displayed when the API is working properly.`,
-        },
-        {
-          heading: "Cultural Context",
-          description: `In Japanese culture, ${cardTitle} has specific significance and usage patterns. This would contain real cultural insights when connected to the AI service.`,
-        },
-      ]
-      setBackCards(fallbackData)
+      setError(`Failed to load content: ${err.message}`)
+      setBackCards([
+        { heading: `About ${cardTitle}`, description: `Placeholder content for ${cardTitle}. The AI service is temporarily unavailable. Click "Retry" to try again.` },
+        { heading: "Try Again", description: "Use the Retry button below to reload the content from Gemini AI." },
+      ])
     } finally {
+      clearInterval(msgTimer)
       setLoading(false)
-    }
-  }
-
-  // Test API function
-  const testAPI = async () => {
-    try {
-      console.log("🧪 Testing API endpoint...")
-      const response = await fetch("/api/gemini/cards")
-      const data = await response.json()
-      console.log("🧪 API Test Result:", data)
-      alert(`API Test: ${data.message || "Success!"}`)
-    } catch (error) {
-      console.error("🧪 API Test Failed:", error)
-      alert(`API Test Failed: ${error.message}`)
     }
   }
 
@@ -321,18 +290,50 @@ const FlashcardDeck = () => {
 
   const currentBackCard = backCards[currentBackCardIndex]
 
+  // Keyboard navigation for modal card
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (!flippedCard) return
+      if (e.key === "Escape") handleCloseCard()
+      if (e.key === "ArrowRight" && isCardFlipped) handleNextCard({ stopPropagation: () => {} })
+      if (e.key === "ArrowLeft" && isCardFlipped) handlePrevCard({ stopPropagation: () => {} })
+      if (e.key === " " || e.key === "Enter") handleCardFlip()
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [flippedCard, isCardFlipped, currentBackCardIndex, backCards.length])
+
+  const handleSaveNote = (e) => {
+    e.stopPropagation()
+    if (!currentBackCard) return
+    const note = {
+      id: Date.now(),
+      title: `${flippedCard.title} – ${currentBackCard.heading}`,
+      content: currentBackCard.description,
+      savedAt: new Date().toISOString(),
+      topic: flippedCard.title,
+    }
+    const existing = JSON.parse(localStorage.getItem("savedNotes") || "[]")
+    localStorage.setItem("savedNotes", JSON.stringify([...existing, note]))
+    toast({ message: "Note saved to your profile! 📝", type: "success" })
+  }
+
+  const handleRetry = (e) => {
+    e.stopPropagation()
+    if (lastFetchArgs) {
+      const { cardId, category, cardTitle } = lastFetchArgs
+      setError(null)
+      fetchBackCards(cardId, category, cardTitle)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-white p-8 perspective-1000">
-      {/* Test API Button */}
-      <button
-        onClick={testAPI}
-        className="fixed top-4 right-4 z-50 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg shadow-lg transition-colors duration-200"
-      >
-        🧪 Test API
-      </button>
+      <Toast toasts={toasts} dismiss={dismiss} />
 
       <div className="max-w-6xl mx-auto">
         <h1 className="text-3xl font-bold text-center mb-12 text-gray-800">Lexora FlashCards</h1>
+        <p className="text-center text-gray-500 text-sm mb-8">Click any card to explore AI-generated insights</p>
 
         {/* First Row - 3 cards */}
         <div className="flex justify-center items-center mb-16 gap-8 preserve-3d">
@@ -562,7 +563,7 @@ const FlashcardDeck = () => {
               <div className="p-6 h-full flex flex-col">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-xl font-bold text-white">About {flippedCard.title}</h3>
-                  {backCards.length > 0 && (
+                  {backCards.length > 0 && !loading && (
                     <div className="text-sm text-gray-300">
                       {currentBackCardIndex + 1} of {backCards.length}
                     </div>
@@ -572,15 +573,24 @@ const FlashcardDeck = () => {
                 {loading && (
                   <div className="flex items-center justify-center flex-1">
                     <div className="text-center">
-                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
-                      <p className="text-gray-300">Loading information from Gemini AI...</p>
+                      <div className="relative mx-auto mb-4 w-16 h-16">
+                        <div className="animate-spin rounded-full h-16 w-16 border-4 border-white/20 border-t-white absolute inset-0"></div>
+                        <span className="absolute inset-0 flex items-center justify-center text-2xl">✨</span>
+                      </div>
+                      <p className="text-gray-300 text-sm animate-pulse">{loadingMessage}</p>
                     </div>
                   </div>
                 )}
 
-                {error && (
-                  <div className="mb-4 p-3 bg-yellow-600/20 border border-yellow-500/30 rounded-lg">
-                    <p className="text-yellow-300 text-sm">{error}</p>
+                {error && !loading && (
+                  <div className="mb-3 p-3 bg-yellow-600/20 border border-yellow-500/30 rounded-lg flex items-start justify-between gap-2">
+                    <p className="text-yellow-300 text-xs flex-1">{error}</p>
+                    <button
+                      onClick={handleRetry}
+                      className="shrink-0 px-3 py-1 bg-yellow-500/30 hover:bg-yellow-500/50 text-yellow-200 rounded-lg text-xs font-medium transition-colors"
+                    >
+                      🔄 Retry
+                    </button>
                   </div>
                 )}
 
@@ -594,47 +604,65 @@ const FlashcardDeck = () => {
                 )}
 
                 {!loading && backCards.length === 0 && (
-                  <div className="flex items-center justify-center flex-1">
+                  <div className="flex flex-col items-center justify-center flex-1 gap-3">
                     <p className="text-gray-300 text-center">No information found</p>
-                  </div>
-                )}
-
-                {/* Navigation buttons */}
-                {backCards.length > 1 && !loading && (
-                  <div className="flex justify-between items-center mt-4">
                     <button
-                      onClick={handlePrevCard}
-                      disabled={currentBackCardIndex === 0}
-                      className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 disabled:bg-white/10 disabled:opacity-50 rounded-lg transition-all duration-200 text-white disabled:cursor-not-allowed"
+                      onClick={handleRetry}
+                      className="px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg text-sm transition-colors"
                     >
-                      <span>←</span>
-                      <span>Previous</span>
-                    </button>
-
-                    <div className="flex gap-2">
-                      {backCards.map((_, index) => (
-                        <div
-                          key={index}
-                          className={`w-2 h-2 rounded-full transition-all duration-200 ${
-                            index === currentBackCardIndex ? "bg-white" : "bg-white/30"
-                          }`}
-                        />
-                      ))}
-                    </div>
-
-                    <button
-                      onClick={handleNextCard}
-                      disabled={currentBackCardIndex === backCards.length - 1}
-                      className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 disabled:bg-white/10 disabled:opacity-50 rounded-lg transition-all duration-200 text-white disabled:cursor-not-allowed"
-                    >
-                      <span>Next</span>
-                      <span>→</span>
+                      🔄 Retry
                     </button>
                   </div>
                 )}
 
-                <div className="text-center mt-4">
-                  <p className="text-xs text-gray-400">Click card to flip back</p>
+                {/* Navigation + Save Note */}
+                {!loading && backCards.length > 0 && (
+                  <div className="mt-4 space-y-3">
+                    {/* Save note button */}
+                    <button
+                      onClick={handleSaveNote}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-indigo-500/30 hover:bg-indigo-500/50 text-indigo-200 rounded-lg text-sm font-medium transition-colors border border-indigo-400/30"
+                    >
+                      <span>💾</span> Save this note to Profile
+                    </button>
+
+                    {/* Prev / dots / Next */}
+                    {backCards.length > 1 && (
+                      <div className="flex justify-between items-center">
+                        <button
+                          onClick={handlePrevCard}
+                          disabled={currentBackCardIndex === 0}
+                          className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 disabled:bg-white/10 disabled:opacity-50 rounded-lg transition-all duration-200 text-white disabled:cursor-not-allowed text-sm"
+                        >
+                          ← Prev
+                        </button>
+
+                        <div className="flex gap-1.5">
+                          {backCards.map((_, idx) => (
+                            <button
+                              key={idx}
+                              onClick={(e) => { e.stopPropagation(); setCurrentBackCardIndex(idx) }}
+                              className={`w-2 h-2 rounded-full transition-all duration-200 ${
+                                idx === currentBackCardIndex ? "bg-white scale-125" : "bg-white/30 hover:bg-white/60"
+                              }`}
+                            />
+                          ))}
+                        </div>
+
+                        <button
+                          onClick={handleNextCard}
+                          disabled={currentBackCardIndex === backCards.length - 1}
+                          className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 disabled:bg-white/10 disabled:opacity-50 rounded-lg transition-all duration-200 text-white disabled:cursor-not-allowed text-sm"
+                        >
+                          Next →
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="text-center mt-3">
+                  <p className="text-xs text-gray-500">Space/Enter to flip · ← → to navigate · Esc to close</p>
                 </div>
               </div>
             </div>

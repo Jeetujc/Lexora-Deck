@@ -24,5 +24,14 @@
     .shadow-3xl {
       box-shadow: 0 35px 60px -12px rgba(0, 0, 0, 0.25);
     }
+
+    @keyframes slide-in {
+      from { opacity: 0; transform: translateX(60px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+    .animate-slide-in {
+      animation: slide-in 0.25s ease-out;
+    }
   }
+
   
