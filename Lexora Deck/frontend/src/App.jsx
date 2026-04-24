@@ -6,6 +6,7 @@ import Navbar from "./components/Navbar"
 import FlashcardDeck from "./components/FlashcardDeck"
 import LeaderboardPage from "./components/Leaderboard/LeaderboardPage"
 import QuizPage from "./components/Quiz/QuizPage"
+import ProfilePage from "./components/Profile/ProfilePage"
 import "./App.css"
 import Home from "./pages/Home"
 
@@ -31,15 +32,17 @@ function AppContent() {
   const renderCurrentPage = () => {
     switch (currentPage) {
       case "home" :
-        return <Home/>
+        return <Home onPageChange={setCurrentPage} />
       case "flashcards":
         return <FlashcardDeck />
       case "quiz":
         return <QuizPage />
       case "leaderboard":
         return <LeaderboardPage />
+      case "profile":
+        return <ProfilePage onPageChange={setCurrentPage} />
       default:
-        return <Home />
+        return <Home onPageChange={setCurrentPage} />
     }
   }
 
