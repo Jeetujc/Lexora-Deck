@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useAuth } from "../contexts/AuthContext"
 
 const FlashcardDeck = () => {
   const [flippedCard, setFlippedCard] = useState(null)
@@ -11,6 +12,8 @@ const FlashcardDeck = () => {
   const [error, setError] = useState(null)
   const [userInput, setUserInput] = useState("")
   const [showInputModal, setShowInputModal] = useState(false)
+
+  const { token } = useAuth()
 
   const cards = [
     // First row (3 cards)
@@ -161,6 +164,18 @@ const FlashcardDeck = () => {
         setBackCards(data.points)
         if (data.fallback || data.error) {
           setError(`Note: ${data.error || "Using fallback data - API temporarily unavailable"}`)
+        }
+
+        // Record this card view in user progress (fire-and-forget)
+        if (token) {
+          fetch("/api/progress/update", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ cardName: cardTitle, category }),
+          }).catch((err) => console.error("Progress update failed:", err))
         }
       } else {
         throw new Error(data.error || "Invalid response format")

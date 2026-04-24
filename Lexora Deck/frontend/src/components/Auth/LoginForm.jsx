@@ -1,7 +1,6 @@
 "use client"
 
 import { useState } from "react"
-import { useNavigate } from "react-router-dom" // ✅ For redirection
 import { useAuth } from "../../contexts/AuthContext"
 import logo from "../../assets/logo.jpg"
 
@@ -14,7 +13,6 @@ const LoginForm = ({ onSwitchToRegister }) => {
   const [loading, setLoading] = useState(false)
 
   const { login } = useAuth()
-  const navigate = useNavigate() // ✅
 
   const handleChange = (e) => {
     setFormData({
@@ -31,11 +29,10 @@ const LoginForm = ({ onSwitchToRegister }) => {
 
     const result = await login(formData.email, formData.password)
 
-    if (result.success) {
-      navigate("/main") // ✅ Redirect to main page
-    } else {
+    if (!result.success) {
       setError(result.error || "Login failed")
     }
+    // On success, AuthContext sets user → App.jsx automatically unmounts AuthPage
 
     setLoading(false)
   }

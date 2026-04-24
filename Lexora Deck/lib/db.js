@@ -56,6 +56,19 @@ export async function initDatabase() {
       )
     `)
 
+    // Create quiz_results table for tracking quiz completions
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS quiz_results (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        score INT NOT NULL,
+        total_questions INT NOT NULL,
+        percentage DECIMAL(5,2) NOT NULL,
+        completed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      )
+    `)
+
     console.log("Database tables initialized successfully")
   } catch (error) {
     console.error("Database initialization error:", error)
