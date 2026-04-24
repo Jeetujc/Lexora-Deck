@@ -3,21 +3,59 @@
 import { useState, useEffect } from "react"
 import { useAuth } from "../../contexts/AuthContext"
 
-const QuizPage = () => {
-  const [currentQuestion, setCurrentQuestion] = useState(0)
-  const [selectedAnswer, setSelectedAnswer] = useState(null)
-  const [score, setScore] = useState(0)
-  const [showResult, setShowResult] = useState(false)
-  const [quizCompleted, setQuizCompleted] = useState(false)
-  const [timeLeft, setTimeLeft] = useState(30)
-  const [quizStarted, setQuizStarted] = useState(false)
-  const [userAnswers, setUserAnswers] = useState([])
-  const [pointsEarned, setPointsEarned] = useState(null)
+const quizTopics = [
+  {
+    id: "japanese",
+    title: "Japanese",
+    subtitle: "Language",
+    icon: "🇯🇵",
+    color: "bg-red-100",
+    description: "Vocabulary, Hiragana & Numbers",
+  },
+  {
+    id: "finance",
+    title: "Finance",
+    subtitle: "Money & Markets",
+    icon: "₹",
+    color: "bg-blue-100",
+    description: "Economics, Investing & More",
+  },
+  {
+    id: "coding",
+    title: "Coding",
+    subtitle: "Tech Quiz",
+    icon: "👨🏻‍💻",
+    color: "bg-yellow-100",
+    description: "Programming Concepts",
+  },
+  {
+    id: "health",
+    title: "Health",
+    subtitle: "Body & Mind",
+    icon: "🩺",
+    color: "bg-green-100",
+    description: "Fitness, Nutrition & Wellness",
+  },
+  {
+    id: "general",
+    title: "General",
+    subtitle: "Mixed Topics",
+    icon: "✨",
+    color: "bg-purple-100",
+    description: "Trivia & General Knowledge",
+  },
+  {
+    id: "books",
+    title: "Literature",
+    subtitle: "Books & Classics",
+    icon: "📚",
+    color: "bg-indigo-100",
+    description: "Authors, Plots & More",
+  },
+]
 
-  const { token } = useAuth()
-
-  // Sample quiz questions (frontend only)
-  const quizQuestions = [
+const allQuizQuestions = {
+  japanese: [
     {
       id: 1,
       question: "What does '自転車' mean in English?",
@@ -63,7 +101,7 @@ const QuizPage = () => {
       question: "How do you say 'Good morning' in Japanese?",
       options: ["Konbanwa", "Ohayo gozaimasu", "Konnichiwa", "Oyasumi"],
       correct: 1,
-      explanation: "'おはようございます' (Ohayo gozaimasu) means 'Good morning' in Japanese.",
+      explanation: "'おはようございます' (Ohayo gozaimasu) means 'Good morning'.",
       category: "Greetings",
     },
     {
@@ -82,7 +120,236 @@ const QuizPage = () => {
       explanation: "'三' (san) means three in Japanese.",
       category: "Numbers",
     },
-  ]
+  ],
+  finance: [
+    {
+      id: 1,
+      question: "What does 'ROI' stand for?",
+      options: ["Rate of Income", "Return on Investment", "Risk of Inflation", "Revenue on Interest"],
+      correct: 1,
+      explanation: "ROI stands for Return on Investment — the gain relative to the cost.",
+      category: "Finance",
+    },
+    {
+      id: 2,
+      question: "What is a 'bull market'?",
+      options: ["Prices are falling", "Market is closed", "Prices are rising", "High inflation period"],
+      correct: 2,
+      explanation: "A bull market refers to a period of rising asset prices, typically 20%+.",
+      category: "Markets",
+    },
+    {
+      id: 3,
+      question: "What is the main purpose of a central bank?",
+      options: ["Provide personal loans", "Regulate monetary policy", "Sell government bonds directly", "Issue corporate stocks"],
+      correct: 1,
+      explanation: "Central banks regulate monetary policy, control inflation, and manage currency.",
+      category: "Banking",
+    },
+    {
+      id: 4,
+      question: "What does 'diversification' mean in investing?",
+      options: ["Investing in one asset", "Spreading investments across different assets", "Only buying government bonds", "Selling all stocks"],
+      correct: 1,
+      explanation: "Diversification means spreading investments to reduce risk.",
+      category: "Investing",
+    },
+    {
+      id: 5,
+      question: "What is 'compound interest'?",
+      options: ["Simple interest on principal", "Interest earned on interest", "A fixed tax rate", "Stock dividend"],
+      correct: 1,
+      explanation: "Compound interest is interest calculated on both principal and accumulated interest.",
+      category: "Banking",
+    },
+  ],
+  coding: [
+    {
+      id: 1,
+      question: "What does 'HTML' stand for?",
+      options: ["Hyper Text Markup Language", "High Tech Modern Language", "Hyperlink and Text Method Language", "Home Tool Markup Language"],
+      correct: 0,
+      explanation: "HTML stands for HyperText Markup Language — the backbone of web pages.",
+      category: "Web",
+    },
+    {
+      id: 2,
+      question: "Which is NOT a JavaScript data type?",
+      options: ["String", "Boolean", "Float", "Undefined"],
+      correct: 2,
+      explanation: "JavaScript has 'Number' not 'Float' as a distinct type.",
+      category: "JavaScript",
+    },
+    {
+      id: 3,
+      question: "What does 'API' stand for?",
+      options: ["Application Programming Interface", "Automated Program Index", "Application Process Integration", "Advanced Programming Input"],
+      correct: 0,
+      explanation: "API stands for Application Programming Interface.",
+      category: "Concepts",
+    },
+    {
+      id: 4,
+      question: "Which sorting algorithm has O(n log n) average time complexity?",
+      options: ["Bubble Sort", "Selection Sort", "Merge Sort", "Insertion Sort"],
+      correct: 2,
+      explanation: "Merge Sort has O(n log n) average and worst-case time complexity.",
+      category: "Algorithms",
+    },
+    {
+      id: 5,
+      question: "What is a 'null pointer' exception?",
+      options: ["Memory overflow", "Accessing an object reference with no value", "Infinite loop", "Type mismatch"],
+      correct: 1,
+      explanation: "A null pointer exception occurs when you try to use an object reference that points to null.",
+      category: "Concepts",
+    },
+  ],
+  health: [
+    {
+      id: 1,
+      question: "How many bones are in the adult human body?",
+      options: ["196", "206", "216", "226"],
+      correct: 1,
+      explanation: "An adult human body has 206 bones.",
+      category: "Anatomy",
+    },
+    {
+      id: 2,
+      question: "Which vitamin is produced by the skin when exposed to sunlight?",
+      options: ["Vitamin A", "Vitamin B12", "Vitamin C", "Vitamin D"],
+      correct: 3,
+      explanation: "Vitamin D is synthesized by the skin upon exposure to UVB sunlight.",
+      category: "Nutrition",
+    },
+    {
+      id: 3,
+      question: "What is the recommended daily water intake for adults?",
+      options: ["1 liter", "1.5 liters", "2 liters", "3 liters"],
+      correct: 2,
+      explanation: "Health guidelines generally recommend about 2 liters (8 cups) per day.",
+      category: "Wellness",
+    },
+    {
+      id: 4,
+      question: "What is the normal resting heart rate for adults?",
+      options: ["40-50 bpm", "60-100 bpm", "110-120 bpm", "130-140 bpm"],
+      correct: 1,
+      explanation: "Normal resting heart rate for adults is 60-100 beats per minute.",
+      category: "Physiology",
+    },
+    {
+      id: 5,
+      question: "Which macronutrient provides 4 calories per gram?",
+      options: ["Fat", "Carbohydrate", "Alcohol", "Fiber"],
+      correct: 1,
+      explanation: "Carbohydrates provide 4 calories per gram (protein too; fat provides 9).",
+      category: "Nutrition",
+    },
+  ],
+  general: [
+    {
+      id: 1,
+      question: "Which planet is known as the Red Planet?",
+      options: ["Venus", "Jupiter", "Mars", "Saturn"],
+      correct: 2,
+      explanation: "Mars is called the Red Planet due to iron oxide on its surface.",
+      category: "Science",
+    },
+    {
+      id: 2,
+      question: "Who painted the Mona Lisa?",
+      options: ["Michelangelo", "Raphael", "Leonardo da Vinci", "Caravaggio"],
+      correct: 2,
+      explanation: "The Mona Lisa was painted by Leonardo da Vinci.",
+      category: "Art",
+    },
+    {
+      id: 3,
+      question: "What is the largest ocean on Earth?",
+      options: ["Atlantic", "Indian", "Arctic", "Pacific"],
+      correct: 3,
+      explanation: "The Pacific Ocean is the largest, covering more than 30% of Earth's surface.",
+      category: "Geography",
+    },
+    {
+      id: 4,
+      question: "In which year did World War II end?",
+      options: ["1943", "1944", "1945", "1946"],
+      correct: 2,
+      explanation: "World War II ended in 1945 with Germany surrendering in May and Japan in September.",
+      category: "History",
+    },
+    {
+      id: 5,
+      question: "What is the chemical symbol for gold?",
+      options: ["Go", "Gd", "Au", "Ag"],
+      correct: 2,
+      explanation: "Gold's chemical symbol is Au, from the Latin word 'Aurum'.",
+      category: "Chemistry",
+    },
+  ],
+  books: [
+    {
+      id: 1,
+      question: "Who wrote 'Pride and Prejudice'?",
+      options: ["Charlotte Brontë", "Jane Austen", "Virginia Woolf", "George Eliot"],
+      correct: 1,
+      explanation: "'Pride and Prejudice' was written by Jane Austen, published in 1813.",
+      category: "Classic Literature",
+    },
+    {
+      id: 2,
+      question: "In 'Harry Potter', what is the name of Harry's owl?",
+      options: ["Errol", "Pigwidgeon", "Hedwig", "Crookshanks"],
+      correct: 2,
+      explanation: "Harry Potter's owl is named Hedwig, a snowy owl.",
+      category: "Fiction",
+    },
+    {
+      id: 3,
+      question: "Who wrote '1984'?",
+      options: ["Aldous Huxley", "Ray Bradbury", "George Orwell", "H.G. Wells"],
+      correct: 2,
+      explanation: "'1984' was written by George Orwell and published in 1949.",
+      category: "Dystopian",
+    },
+    {
+      id: 4,
+      question: "What is the subtitle of 'The Lord of the Rings: The Fellowship of the Ring'?",
+      options: ["The Two Towers", "The Fellowship of the Ring", "The Return of the King", "The Shire"],
+      correct: 1,
+      explanation: "The first book of the trilogy is 'The Fellowship of the Ring'.",
+      category: "Fantasy",
+    },
+    {
+      id: 5,
+      question: "Which Shakespeare play features the character Ophelia?",
+      options: ["Macbeth", "Othello", "King Lear", "Hamlet"],
+      correct: 3,
+      explanation: "Ophelia is a character in Shakespeare's 'Hamlet'.",
+      category: "Classic Literature",
+    },
+  ],
+}
+
+const QuizPage = () => {
+  const [selectedTopic, setSelectedTopic] = useState(null)
+  const [currentQuestion, setCurrentQuestion] = useState(0)
+  const [selectedAnswer, setSelectedAnswer] = useState(null)
+  const [score, setScore] = useState(0)
+  const [showResult, setShowResult] = useState(false)
+  const [quizCompleted, setQuizCompleted] = useState(false)
+  const [timeLeft, setTimeLeft] = useState(30)
+  const [quizStarted, setQuizStarted] = useState(false)
+  const [userAnswers, setUserAnswers] = useState([])
+  const [pointsEarned, setPointsEarned] = useState(null)
+
+  const { token } = useAuth()
+
+  const quizQuestions = selectedTopic ? (allQuizQuestions[selectedTopic] || allQuizQuestions.japanese) : []
+
+  const currentTopicInfo = quizTopics.find((t) => t.id === selectedTopic)
 
   // Timer effect
   useEffect(() => {
@@ -172,6 +439,7 @@ const QuizPage = () => {
   }
 
   const resetQuiz = () => {
+    setSelectedTopic(null)
     setQuizStarted(false)
     setCurrentQuestion(0)
     setScore(0)
@@ -199,16 +467,65 @@ const QuizPage = () => {
     return "Keep studying! 💪"
   }
 
+  // Step 1: Topic Selection
+  if (!selectedTopic) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100 py-8">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-10">
+            <div className="mb-4">
+              <span className="text-7xl">🧠</span>
+            </div>
+            <h1 className="text-4xl font-bold text-gray-900 mb-3">Quiz Challenge</h1>
+            <p className="text-lg text-gray-600">Choose a topic to start your quiz</p>
+          </div>
+
+          {/* Topic Cards Grid - matching FlashcardDeck design */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-6 mb-8">
+            {quizTopics.map((topic, index) => (
+              <div
+                key={topic.id}
+                onClick={() => setSelectedTopic(topic.id)}
+                className={`
+                  relative bg-white rounded-2xl shadow-xl cursor-pointer
+                  transform transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:-translate-y-2
+                  border border-gray-200 overflow-hidden
+                `}
+              >
+                <div className={`h-28 ${topic.color} flex items-center justify-center shadow-inner`}>
+                  <span className="text-5xl drop-shadow-lg">{topic.icon}</span>
+                </div>
+                <div className="p-5 text-center bg-gradient-to-b from-white to-gray-50">
+                  <h3 className="text-xl font-bold text-gray-800 mb-1">{topic.title}</h3>
+                  <p className="text-sm text-gray-600 mb-1">{topic.subtitle}</p>
+                  <p className="text-xs text-indigo-500 font-medium">{topic.description}</p>
+                </div>
+                <div className="absolute inset-0 bg-gradient-to-br from-white/20 to-transparent rounded-2xl pointer-events-none"></div>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-center text-sm text-gray-500">
+            Each quiz has {Object.values(allQuizQuestions)[0].length}–{Object.values(allQuizQuestions)[2].length} questions · 30 seconds each · 1 point per correct answer
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // Step 2: Quiz Rules / Start screen
   if (!quizStarted) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100 py-8">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center">
             <div className="mb-8">
-              <span className="text-8xl">🧠</span>
+              <div className={`inline-block p-6 ${currentTopicInfo?.color} rounded-3xl mb-4 shadow-lg`}>
+                <span className="text-7xl">{currentTopicInfo?.icon}</span>
+              </div>
             </div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-4">Japanese Quiz Challenge</h1>
-            <p className="text-lg text-gray-600 mb-8">Test your Japanese knowledge with our interactive quiz!</p>
+            <h1 className="text-4xl font-bold text-gray-900 mb-2">{currentTopicInfo?.title} Quiz</h1>
+            <p className="text-lg text-gray-600 mb-8">{currentTopicInfo?.description}</p>
 
             <div className="bg-white rounded-lg shadow-lg p-8 mb-8 max-w-2xl mx-auto">
               <h2 className="text-2xl font-semibold text-gray-900 mb-6">Quiz Rules</h2>
@@ -230,8 +547,8 @@ const QuizPage = () => {
                 <div className="flex items-start space-x-3">
                   <span className="text-2xl">🎯</span>
                   <div>
-                    <h3 className="font-medium text-gray-900">Topics</h3>
-                    <p className="text-sm text-gray-600">Vocabulary, Hiragana, Numbers</p>
+                    <h3 className="font-medium text-gray-900">Topic</h3>
+                    <p className="text-sm text-gray-600">{currentTopicInfo?.description}</p>
                   </div>
                 </div>
                 <div className="flex items-start space-x-3">
@@ -244,12 +561,20 @@ const QuizPage = () => {
               </div>
             </div>
 
-            <button
-              onClick={startQuiz}
-              className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold py-4 px-8 rounded-lg text-xl transition-all duration-200 transform hover:scale-105 shadow-lg"
-            >
-              Start Quiz 🚀
-            </button>
+            <div className="flex justify-center gap-4">
+              <button
+                onClick={() => setSelectedTopic(null)}
+                className="bg-white hover:bg-gray-50 text-gray-700 font-bold py-4 px-8 rounded-lg text-lg transition-all duration-200 border border-gray-300"
+              >
+                ← Change Topic
+              </button>
+              <button
+                onClick={startQuiz}
+                className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold py-4 px-8 rounded-lg text-xl transition-all duration-200 transform hover:scale-105 shadow-lg"
+              >
+                Start Quiz 🚀
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -369,7 +694,7 @@ const QuizPage = () => {
             <div className="flex items-center space-x-4">
               <span className="text-2xl">🧠</span>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Japanese Quiz</h1>
+                <h1 className="text-2xl font-bold text-gray-900">{currentTopicInfo?.title || "Quiz"}</h1>
                 <p className="text-sm text-gray-600">
                   Question {currentQuestion + 1} of {quizQuestions.length}
                 </p>
