@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useAuth } from "../../contexts/AuthContext"
 
 const QuizPage = () => {
   const [currentQuestion, setCurrentQuestion] = useState(0)
@@ -11,6 +12,9 @@ const QuizPage = () => {
   const [timeLeft, setTimeLeft] = useState(30)
   const [quizStarted, setQuizStarted] = useState(false)
   const [userAnswers, setUserAnswers] = useState([])
+  const [pointsEarned, setPointsEarned] = useState(null)
+
+  const { token } = useAuth()
 
   // Sample quiz questions (frontend only)
   const quizQuestions = [
@@ -139,7 +143,30 @@ const QuizPage = () => {
         setShowResult(false)
         setTimeLeft(30)
       } else {
+        const finalScore = isCorrect ? score + 1 : score
         setQuizCompleted(true)
+
+        // Save quiz results to backend (fire-and-forget)
+        if (token) {
+          fetch("/api/quiz/save", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              score: finalScore,
+              totalQuestions: quizQuestions.length,
+            }),
+          })
+            .then((res) => res.json())
+            .then((data) => {
+              if (data.pointsEarned !== undefined) {
+                setPointsEarned(data.pointsEarned)
+              }
+            })
+            .catch((err) => console.error("Failed to save quiz results:", err))
+        }
       }
     }, 2000)
   }
@@ -153,6 +180,7 @@ const QuizPage = () => {
     setQuizCompleted(false)
     setTimeLeft(30)
     setUserAnswers([])
+    setPointsEarned(null)
   }
 
   const getScoreColor = () => {
@@ -276,6 +304,14 @@ const QuizPage = () => {
                 <div className="text-sm text-gray-600">Score</div>
               </div>
             </div>
+
+            {/* Points earned banner */}
+            {pointsEarned !== null && (
+              <div className="text-center p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
+                <div className="text-2xl font-bold text-indigo-600">+{pointsEarned} pts</div>
+                <div className="text-sm text-gray-600">Added to your leaderboard score!</div>
+              </div>
+            )}
           </div>
 
           {/* Review Answers */}
