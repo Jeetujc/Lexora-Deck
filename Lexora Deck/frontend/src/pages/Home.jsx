@@ -1,6 +1,8 @@
 import React from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Zap, Shield, Rocket, Users, BookOpen, Brain, Trophy, Layers } from 'lucide-react';
+import Dashboard from '../components/Dashboard';
+import Achievements from '../components/Achievements';
 
 function Home({ onPageChange }) {
   const { user } = useAuth();
@@ -134,6 +136,12 @@ function Home({ onPageChange }) {
           </div>
         </div>
       </section>
+
+      {/* Dashboard Stats (only shown if user has data) */}
+      <Dashboard />
+
+      {/* Achievements (only shown if user has earned any) */}
+      <Achievements />
 
       {/* Featured Decks / Topics */}
       <section className="py-16 bg-gray-50">

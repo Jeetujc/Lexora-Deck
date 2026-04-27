@@ -5,7 +5,7 @@ import { useAuth } from "../contexts/AuthContext"
 import { useToast } from "../hooks/useToast"
 import Toast from "./Toast"
 
-const FlashcardDeck = () => {
+const FlashcardDeck = ({ onQuizMe }) => {
   const [flippedCard, setFlippedCard] = useState(null)
   const [isCardFlipped, setIsCardFlipped] = useState(false)
   const [backCards, setBackCards] = useState([])
@@ -675,6 +675,20 @@ const FlashcardDeck = () => {
           >
             ×
           </button>
+
+          {/* Quiz Me button */}
+          {onQuizMe && !flippedCard?.isSearchCard && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onQuizMe(flippedCard.title)
+                handleCloseCard()
+              }}
+              className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold py-2.5 px-7 rounded-xl text-sm transition-all duration-200 shadow-lg flex items-center gap-2 whitespace-nowrap"
+            >
+              🧠 Quiz Me!
+            </button>
+          )}
         </div>
       )}
     </div>
