@@ -77,7 +77,7 @@ const CARD_TOPIC_MAP = {
   Gym: "health",
   Book: "books",
   "House Affordability": "finance",
-  "For car Enthuasists": "general",
+  "For car Enthusiasts": "general",
   Food: "health",
 }
 
@@ -490,17 +490,18 @@ const QuizPage = ({ initialTopic, onTopicClear, onPageChange }) => {
           selectedTopic === "custom" ? customTopicName || "Custom" : currentTopicInfo?.title || selectedTopic
         saveQuiz({ topic: topicLabel, score: finalScore, total: quizQuestions.length, difficulty })
 
-        // Check achievements
-        const stats = getStats()
+        // Check achievements – call getStats() after saveQuiz() so counts are accurate
+        const statsAfterSave = getStats()
         const unlocked = checkAndUnlock({
-          quizzesTaken: stats.quizzesTaken + 1,
+          quizzesTaken: statsAfterSave.quizzesTaken,
           percentage: Math.round((finalScore / quizQuestions.length) * 100),
           streak: newStreak,
-          cardsReviewed: stats.cardsReviewed,
+          cardsReviewed: statsAfterSave.cardsReviewed,
         })
         setNewAchievements(unlocked)
+        const ACHIEVEMENT_TOAST_DELAY = 500
         unlocked.forEach((a) => {
-          setTimeout(() => toast({ message: `🏅 Achievement unlocked: ${a.title} ${a.emoji}`, type: "success", duration: 4000 }), 500)
+          setTimeout(() => toast({ message: `🏅 Achievement unlocked: ${a.title} ${a.emoji}`, type: "success", duration: 4000 }), ACHIEVEMENT_TOAST_DELAY)
         })
 
         // Save quiz results to backend (fire-and-forget)

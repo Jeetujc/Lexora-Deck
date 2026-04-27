@@ -90,7 +90,7 @@ const FlashcardDeck = ({ onQuizMe }) => {
     },
     {
       id: 9,
-      title: "For car Enthuasists",
+      title: "For car Enthusiasts",
       subtitle: "Car",
       icon: "🚗",
       color: "bg-teal-100",

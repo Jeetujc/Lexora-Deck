@@ -1,5 +1,7 @@
 import { useCallback } from "react"
 
+const BASE_POINTS_PER_CORRECT = 10
+
 export function useQuizStats() {
   const getHistory = useCallback(() => {
     try {
@@ -35,7 +37,7 @@ export function useQuizStats() {
 
       // Update total points (10 pts per correct answer, bonus for difficulty)
       const diffBonus = { easy: 1, medium: 1.5, hard: 2 }[difficulty || "medium"] || 1
-      const earned = Math.round(score * 10 * diffBonus)
+      const earned = Math.round(score * BASE_POINTS_PER_CORRECT * diffBonus)
       const prevPoints = parseInt(localStorage.getItem("totalPoints") || "0")
       localStorage.setItem("totalPoints", String(prevPoints + earned))
 
