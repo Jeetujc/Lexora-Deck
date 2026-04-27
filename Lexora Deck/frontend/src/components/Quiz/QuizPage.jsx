@@ -2,6 +2,11 @@
 
 import { useState, useEffect } from "react"
 import { useAuth } from "../../contexts/AuthContext"
+import { useQuizStats } from "../../hooks/useQuizStats"
+import { useStreak } from "../../hooks/useStreak"
+import { useAchievements } from "../../hooks/useAchievements"
+import { useToast } from "../../hooks/useToast"
+import Toast from "../Toast"
 
 const quizTopics = [
   {
@@ -52,7 +57,35 @@ const quizTopics = [
     color: "bg-indigo-100",
     description: "Authors, Plots & More",
   },
+  {
+    id: "custom",
+    title: "Custom Topic",
+    subtitle: "Any Topic",
+    icon: "🎯",
+    color: "bg-cyan-100",
+    description: "Enter any topic you want to quiz on",
+  },
 ]
+
+// Map flashcard titles → quiz topic IDs
+const CARD_TOPIC_MAP = {
+  Finance: "finance",
+  "Health Studies": "health",
+  Random: "general",
+  Coding: "coding",
+  English: "books",
+  Gym: "health",
+  Book: "books",
+  "House Affordability": "finance",
+  "For car Enthusiasts": "general",
+  Food: "health",
+}
+
+const DIFFICULTY_CONFIG = {
+  easy: { label: "Easy", emoji: "🟢", time: 60, multiplier: 1 },
+  medium: { label: "Medium", emoji: "🟡", time: 30, multiplier: 1.5 },
+  hard: { label: "Hard", emoji: "🔴", time: 15, multiplier: 2 },
+}
 
 const allQuizQuestions = {
   japanese: [
@@ -333,8 +366,12 @@ const allQuizQuestions = {
   ],
 }
 
-const QuizPage = () => {
+const QuizPage = ({ initialTopic, onTopicClear, onPageChange }) => {
   const [selectedTopic, setSelectedTopic] = useState(null)
+  const [difficulty, setDifficulty] = useState("medium")
+  const [difficultyChosen, setDifficultyChosen] = useState(false)
+  const [customTopicName, setCustomTopicName] = useState("")
+  const [showCustomModal, setShowCustomModal] = useState(false)
   const [currentQuestion, setCurrentQuestion] = useState(0)
   const [selectedAnswer, setSelectedAnswer] = useState(null)
   const [score, setScore] = useState(0)
@@ -344,12 +381,39 @@ const QuizPage = () => {
   const [quizStarted, setQuizStarted] = useState(false)
   const [userAnswers, setUserAnswers] = useState([])
   const [pointsEarned, setPointsEarned] = useState(null)
+  const [currentStreak, setCurrentStreak] = useState(0)
+  const [newAchievements, setNewAchievements] = useState([])
 
   const { token } = useAuth()
+  const { saveQuiz, getStats } = useQuizStats()
+  const { getStreak, updateStreak } = useStreak()
+  const { checkAndUnlock } = useAchievements()
+  const { toasts, toast, dismiss } = useToast()
 
-  const quizQuestions = selectedTopic ? (allQuizQuestions[selectedTopic] || allQuizQuestions.japanese) : []
-
+  // Effective topic – custom maps to general questions
+  const effectiveTopic = selectedTopic === "custom" ? "general" : selectedTopic
+  const quizQuestions = effectiveTopic ? (allQuizQuestions[effectiveTopic] || allQuizQuestions.general) : []
   const currentTopicInfo = quizTopics.find((t) => t.id === selectedTopic)
+  const diffConfig = DIFFICULTY_CONFIG[difficulty] || DIFFICULTY_CONFIG.medium
+
+  // Apply initialTopic from flashcard "Quiz Me!" button
+  useEffect(() => {
+    if (initialTopic && !selectedTopic) {
+      const mapped = CARD_TOPIC_MAP[initialTopic]
+      if (mapped) {
+        setSelectedTopic(mapped)
+      } else {
+        // Use as custom topic
+        setCustomTopicName(initialTopic)
+        setSelectedTopic("custom")
+      }
+    }
+  }, [initialTopic, selectedTopic])
+
+  // Load current streak on mount
+  useEffect(() => {
+    setCurrentStreak(getStreak())
+  }, [getStreak])
 
   // Timer effect
   useEffect(() => {
@@ -371,13 +435,16 @@ const QuizPage = () => {
     setSelectedAnswer(null)
     setShowResult(false)
     setQuizCompleted(false)
-    setTimeLeft(30)
+    setTimeLeft(diffConfig.time)
     setUserAnswers([])
+    setNewAchievements([])
   }
 
   const handleAnswerSelect = (answerIndex) => {
     if (selectedAnswer === null) {
       setSelectedAnswer(answerIndex)
+      // Instant feedback — show result immediately on answer
+      setShowResult(true)
     }
   }
 
@@ -395,7 +462,8 @@ const QuizPage = () => {
       explanation: currentQ.explanation,
     }
 
-    setUserAnswers([...userAnswers, newAnswer])
+    const updatedAnswers = [...userAnswers, newAnswer]
+    setUserAnswers(updatedAnswers)
 
     if (isCorrect) {
       setScore(score + 1)
@@ -408,10 +476,33 @@ const QuizPage = () => {
         setCurrentQuestion(currentQuestion + 1)
         setSelectedAnswer(null)
         setShowResult(false)
-        setTimeLeft(30)
+        setTimeLeft(diffConfig.time)
       } else {
         const finalScore = isCorrect ? score + 1 : score
         setQuizCompleted(true)
+
+        // Update streak
+        const newStreak = updateStreak()
+        setCurrentStreak(newStreak)
+
+        // Save quiz to localStorage
+        const topicLabel =
+          selectedTopic === "custom" ? customTopicName || "Custom" : currentTopicInfo?.title || selectedTopic
+        saveQuiz({ topic: topicLabel, score: finalScore, total: quizQuestions.length, difficulty })
+
+        // Check achievements – call getStats() after saveQuiz() so counts are accurate
+        const statsAfterSave = getStats()
+        const unlocked = checkAndUnlock({
+          quizzesTaken: statsAfterSave.quizzesTaken,
+          percentage: Math.round((finalScore / quizQuestions.length) * 100),
+          streak: newStreak,
+          cardsReviewed: statsAfterSave.cardsReviewed,
+        })
+        setNewAchievements(unlocked)
+        const ACHIEVEMENT_TOAST_DELAY = 500
+        unlocked.forEach((a) => {
+          setTimeout(() => toast({ message: `🏅 Achievement unlocked: ${a.title} ${a.emoji}`, type: "success", duration: 4000 }), ACHIEVEMENT_TOAST_DELAY)
+        })
 
         // Save quiz results to backend (fire-and-forget)
         if (token) {
@@ -440,15 +531,19 @@ const QuizPage = () => {
 
   const resetQuiz = () => {
     setSelectedTopic(null)
+    setDifficultyChosen(false)
     setQuizStarted(false)
     setCurrentQuestion(0)
     setScore(0)
     setSelectedAnswer(null)
     setShowResult(false)
     setQuizCompleted(false)
-    setTimeLeft(30)
+    setTimeLeft(diffConfig.time)
     setUserAnswers([])
     setPointsEarned(null)
+    setNewAchievements([])
+    setCustomTopicName("")
+    if (onTopicClear) onTopicClear()
   }
 
   const getScoreColor = () => {
@@ -471,6 +566,7 @@ const QuizPage = () => {
   if (!selectedTopic) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100 py-8">
+        <Toast toasts={toasts} dismiss={dismiss} />
         <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-10">
             <div className="mb-4">
@@ -478,19 +574,26 @@ const QuizPage = () => {
             </div>
             <h1 className="text-4xl font-bold text-gray-900 mb-3">Quiz Challenge</h1>
             <p className="text-lg text-gray-600">Choose a topic to start your quiz</p>
+            {currentStreak > 0 && (
+              <div className="mt-3 inline-flex items-center gap-2 bg-orange-100 text-orange-700 px-4 py-1.5 rounded-full text-sm font-medium">
+                🔥 {currentStreak}-day streak! Keep it up!
+              </div>
+            )}
           </div>
 
-          {/* Topic Cards Grid - matching FlashcardDeck design */}
+          {/* Topic Cards Grid */}
           <div className="grid grid-cols-2 md:grid-cols-3 gap-6 mb-8">
-            {quizTopics.map((topic, index) => (
+            {quizTopics.map((topic) => (
               <div
                 key={topic.id}
-                onClick={() => setSelectedTopic(topic.id)}
-                className={`
-                  relative bg-white rounded-2xl shadow-xl cursor-pointer
-                  transform transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:-translate-y-2
-                  border border-gray-200 overflow-hidden
-                `}
+                onClick={() => {
+                  if (topic.id === "custom") {
+                    setShowCustomModal(true)
+                  } else {
+                    setSelectedTopic(topic.id)
+                  }
+                }}
+                className="relative bg-white rounded-2xl shadow-xl cursor-pointer transform transition-all duration-300 hover:scale-105 hover:shadow-2xl hover:-translate-y-2 border border-gray-200 overflow-hidden"
               >
                 <div className={`h-28 ${topic.color} flex items-center justify-center shadow-inner`}>
                   <span className="text-5xl drop-shadow-lg">{topic.icon}</span>
@@ -506,8 +609,121 @@ const QuizPage = () => {
           </div>
 
           <p className="text-center text-sm text-gray-500">
-            Each quiz has {Object.values(allQuizQuestions)[0].length}–{Object.values(allQuizQuestions)[2].length} questions · 30 seconds each · 1 point per correct answer
+            Each quiz has 5–8 questions · Easy/Medium/Hard timing · Points earned per correct answer
           </p>
+        </div>
+
+        {/* Custom Topic Modal */}
+        {showCustomModal && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{ backgroundColor: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)" }}
+            onClick={() => setShowCustomModal(false)}
+          >
+            <div
+              className="bg-white rounded-3xl shadow-2xl p-8 w-full max-w-md"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="text-center mb-6">
+                <span className="text-5xl">🎯</span>
+                <h2 className="text-2xl font-bold text-gray-800 mt-3 mb-1">Custom Topic Quiz</h2>
+                <p className="text-gray-500 text-sm">Enter any topic and quiz on it</p>
+              </div>
+              <input
+                type="text"
+                value={customTopicName}
+                onChange={(e) => setCustomTopicName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && customTopicName.trim()) {
+                    setSelectedTopic("custom")
+                    setShowCustomModal(false)
+                  }
+                }}
+                placeholder="e.g. World History, Python, Astronomy..."
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-400 focus:outline-none mb-4 text-gray-800"
+                autoFocus
+              />
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowCustomModal(false)}
+                  className="flex-1 py-3 rounded-xl border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors font-medium"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    if (customTopicName.trim()) {
+                      setSelectedTopic("custom")
+                      setShowCustomModal(false)
+                    }
+                  }}
+                  disabled={!customTopicName.trim()}
+                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold hover:from-purple-700 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  Start Quiz 🚀
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Step 1b: Difficulty Selection
+  if (!difficultyChosen) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100 py-8">
+        <Toast toasts={toasts} dismiss={dismiss} />
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-10">
+            <div className={`inline-block p-5 ${currentTopicInfo?.color || "bg-cyan-100"} rounded-3xl mb-4 shadow-lg`}>
+              <span className="text-6xl">{currentTopicInfo?.icon || "🎯"}</span>
+            </div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+              {selectedTopic === "custom" ? `Custom: ${customTopicName}` : currentTopicInfo?.title} Quiz
+            </h1>
+            {selectedTopic === "custom" && (
+              <span className="inline-block bg-cyan-100 text-cyan-700 text-xs font-semibold px-3 py-1 rounded-full mb-3">
+                🎯 Custom Quiz
+              </span>
+            )}
+            <p className="text-gray-600 text-lg">Choose your difficulty</p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+            {Object.entries(DIFFICULTY_CONFIG).map(([key, cfg]) => (
+              <button
+                key={key}
+                onClick={() => setDifficulty(key)}
+                className={`rounded-2xl p-6 text-center border-2 transition-all duration-200 hover:scale-105 ${
+                  difficulty === key
+                    ? "border-indigo-500 bg-indigo-50 shadow-lg"
+                    : "border-gray-200 bg-white hover:border-indigo-300"
+                }`}
+              >
+                <div className="text-4xl mb-2">{cfg.emoji}</div>
+                <p className="text-xl font-bold text-gray-900">{cfg.label}</p>
+                <p className="text-sm text-gray-500 mt-1">{cfg.time}s per question</p>
+                <p className="text-xs text-indigo-500 mt-1">×{cfg.multiplier} pts</p>
+              </button>
+            ))}
+          </div>
+
+          <div className="flex justify-center gap-4">
+            <button
+              onClick={() => setSelectedTopic(null)}
+              className="bg-white hover:bg-gray-50 text-gray-700 font-bold py-3 px-6 rounded-xl border border-gray-300 transition-colors"
+            >
+              ← Change Topic
+            </button>
+            <button
+              onClick={() => setDifficultyChosen(true)}
+              className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold py-3 px-8 rounded-xl transition-all shadow-lg"
+            >
+              Continue →
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -517,18 +733,28 @@ const QuizPage = () => {
   if (!quizStarted) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-100 py-8">
+        <Toast toasts={toasts} dismiss={dismiss} />
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center">
             <div className="mb-8">
-              <div className={`inline-block p-6 ${currentTopicInfo?.color} rounded-3xl mb-4 shadow-lg`}>
-                <span className="text-7xl">{currentTopicInfo?.icon}</span>
+              <div className={`inline-block p-6 ${currentTopicInfo?.color || "bg-cyan-100"} rounded-3xl mb-4 shadow-lg`}>
+                <span className="text-7xl">{currentTopicInfo?.icon || "🎯"}</span>
               </div>
             </div>
-            <h1 className="text-4xl font-bold text-gray-900 mb-2">{currentTopicInfo?.title} Quiz</h1>
-            <p className="text-lg text-gray-600 mb-8">{currentTopicInfo?.description}</p>
+            <h1 className="text-4xl font-bold text-gray-900 mb-2">
+              {selectedTopic === "custom" ? `Custom: ${customTopicName}` : currentTopicInfo?.title} Quiz
+            </h1>
+            {selectedTopic === "custom" && (
+              <span className="inline-block bg-cyan-100 text-cyan-700 text-xs font-semibold px-3 py-1 rounded-full mb-4">
+                🎯 Custom Quiz
+              </span>
+            )}
+            <p className="text-lg text-gray-600 mb-8">
+              {selectedTopic === "custom" ? `General knowledge quiz – topic: ${customTopicName}` : currentTopicInfo?.description}
+            </p>
 
             <div className="bg-white rounded-lg shadow-lg p-8 mb-8 max-w-2xl mx-auto">
-              <h2 className="text-2xl font-semibold text-gray-900 mb-6">Quiz Rules</h2>
+              <h2 className="text-2xl font-semibold text-gray-900 mb-6">Quiz Summary</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-left">
                 <div className="flex items-start space-x-3">
                   <span className="text-2xl">📝</span>
@@ -538,24 +764,26 @@ const QuizPage = () => {
                   </div>
                 </div>
                 <div className="flex items-start space-x-3">
-                  <span className="text-2xl">⏰</span>
+                  <span className="text-2xl">{diffConfig.emoji}</span>
                   <div>
-                    <h3 className="font-medium text-gray-900">Time Limit</h3>
-                    <p className="text-sm text-gray-600">30 seconds per question</p>
+                    <h3 className="font-medium text-gray-900">Difficulty</h3>
+                    <p className="text-sm text-gray-600">{diffConfig.label} — {diffConfig.time}s per question</p>
                   </div>
                 </div>
                 <div className="flex items-start space-x-3">
                   <span className="text-2xl">🎯</span>
                   <div>
                     <h3 className="font-medium text-gray-900">Topic</h3>
-                    <p className="text-sm text-gray-600">{currentTopicInfo?.description}</p>
+                    <p className="text-sm text-gray-600">
+                      {selectedTopic === "custom" ? customTopicName : currentTopicInfo?.description}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-start space-x-3">
                   <span className="text-2xl">🏆</span>
                   <div>
                     <h3 className="font-medium text-gray-900">Scoring</h3>
-                    <p className="text-sm text-gray-600">1 point per correct answer</p>
+                    <p className="text-sm text-gray-600">×{diffConfig.multiplier} pts per correct answer</p>
                   </div>
                 </div>
               </div>
@@ -563,10 +791,10 @@ const QuizPage = () => {
 
             <div className="flex justify-center gap-4">
               <button
-                onClick={() => setSelectedTopic(null)}
+                onClick={() => setDifficultyChosen(false)}
                 className="bg-white hover:bg-gray-50 text-gray-700 font-bold py-4 px-8 rounded-lg text-lg transition-all duration-200 border border-gray-300"
               >
-                ← Change Topic
+                ← Change Difficulty
               </button>
               <button
                 onClick={startQuiz}
@@ -584,11 +812,22 @@ const QuizPage = () => {
   if (quizCompleted) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-100 py-8">
+        <Toast toasts={toasts} dismiss={dismiss} />
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-8">
             <div className="text-8xl mb-4">🎉</div>
             <h1 className="text-4xl font-bold text-gray-900 mb-2">Quiz Completed!</h1>
             <p className="text-lg text-gray-600">{getScoreMessage()}</p>
+            {selectedTopic === "custom" && (
+              <span className="inline-block bg-cyan-100 text-cyan-700 text-xs font-semibold px-3 py-1 rounded-full mt-2">
+                🎯 Custom Quiz: {customTopicName}
+              </span>
+            )}
+            {currentStreak > 0 && (
+              <div className="mt-3 inline-flex items-center gap-2 bg-orange-100 text-orange-700 px-4 py-1.5 rounded-full text-sm font-medium ml-2">
+                🔥 {currentStreak}-day streak!
+              </div>
+            )}
           </div>
 
           {/* Score Summary */}
@@ -630,11 +869,33 @@ const QuizPage = () => {
               </div>
             </div>
 
+            {/* Difficulty badge */}
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <span className="text-sm text-gray-500">Difficulty:</span>
+              <span className="inline-flex items-center gap-1 bg-gray-100 text-gray-700 text-sm font-medium px-3 py-1 rounded-full">
+                {diffConfig.emoji} {diffConfig.label}
+              </span>
+            </div>
+
             {/* Points earned banner */}
             {pointsEarned !== null && (
-              <div className="text-center p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
+              <div className="text-center p-4 bg-indigo-50 border border-indigo-200 rounded-lg mb-4">
                 <div className="text-2xl font-bold text-indigo-600">+{pointsEarned} pts</div>
                 <div className="text-sm text-gray-600">Added to your leaderboard score!</div>
+              </div>
+            )}
+
+            {/* New achievements */}
+            {newAchievements.length > 0 && (
+              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <p className="font-semibold text-yellow-800 mb-2">🏅 Achievements Unlocked!</p>
+                <div className="flex flex-wrap gap-2">
+                  {newAchievements.map((a) => (
+                    <span key={a.id} className="inline-flex items-center gap-1 bg-yellow-100 text-yellow-700 text-sm px-3 py-1 rounded-full">
+                      {a.emoji} {a.title}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
           </div>
@@ -664,7 +925,7 @@ const QuizPage = () => {
           </div>
 
           {/* Action Buttons */}
-          <div className="text-center space-x-4">
+          <div className="text-center space-x-4 pb-8">
             <button
               onClick={resetQuiz}
               className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold py-3 px-6 rounded-lg transition-all duration-200 transform hover:scale-105"
@@ -672,7 +933,7 @@ const QuizPage = () => {
               Take Quiz Again
             </button>
             <button
-              onClick={() => window.location.reload()}
+              onClick={() => onPageChange ? onPageChange("home") : resetQuiz()}
               className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg transition-all duration-200"
             >
               Back to Home
@@ -694,17 +955,27 @@ const QuizPage = () => {
             <div className="flex items-center space-x-4">
               <span className="text-2xl">🧠</span>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">{currentTopicInfo?.title || "Quiz"}</h1>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  {selectedTopic === "custom" ? customTopicName : (currentTopicInfo?.title || "Quiz")}
+                </h1>
                 <p className="text-sm text-gray-600">
                   Question {currentQuestion + 1} of {quizQuestions.length}
                 </p>
               </div>
             </div>
-            <div className="text-right">
-              <div className={`text-3xl font-bold ${timeLeft <= 10 ? "text-red-600" : "text-blue-600"}`}>
-                {timeLeft}s
+            <div className="flex items-center gap-4">
+              {currentStreak > 0 && (
+                <div className="text-center">
+                  <div className="text-xl font-bold text-orange-500">🔥 {currentStreak}</div>
+                  <div className="text-xs text-gray-500">streak</div>
+                </div>
+              )}
+              <div className="text-right">
+                <div className={`text-3xl font-bold ${timeLeft <= Math.floor(diffConfig.time * 0.33) ? "text-red-600" : "text-blue-600"}`}>
+                  {timeLeft}s
+                </div>
+                <div className="text-sm text-gray-600">{diffConfig.emoji} {diffConfig.label}</div>
               </div>
-              <div className="text-sm text-gray-600">Time left</div>
             </div>
           </div>
 
@@ -720,9 +991,9 @@ const QuizPage = () => {
           <div className="w-full bg-gray-200 rounded-full h-1">
             <div
               className={`h-1 rounded-full transition-all duration-1000 ${
-                timeLeft <= 10 ? "bg-red-500" : "bg-green-500"
+                timeLeft <= Math.floor(diffConfig.time * 0.33) ? "bg-red-500" : "bg-green-500"
               }`}
-              style={{ width: `${(timeLeft / 30) * 100}%` }}
+              style={{ width: `${(timeLeft / diffConfig.time) * 100}%` }}
             ></div>
           </div>
         </div>
@@ -805,17 +1076,18 @@ const QuizPage = () => {
             </div>
           )}
 
-          {/* Next Button */}
-          {selectedAnswer !== null && !showResult && (
+          {/* Next Button – shows after answer is selected (instant feedback shown) */}
+          {selectedAnswer !== null && showResult && (
             <button
               onClick={handleNextQuestion}
               className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-bold py-3 px-6 rounded-lg transition-all duration-200"
             >
-              {currentQuestion + 1 === quizQuestions.length ? "Finish Quiz" : "Next Question"} →
+              {currentQuestion + 1 === quizQuestions.length ? "Finish Quiz ✨" : "Next Question →"}
             </button>
           )}
         </div>
       </div>
+      <Toast toasts={toasts} dismiss={dismiss} />
     </div>
   )
 }

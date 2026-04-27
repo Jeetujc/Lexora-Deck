@@ -13,6 +13,7 @@ import Home from "./pages/Home"
 function AppContent() {
   const { user, loading } = useAuth()
   const [currentPage, setCurrentPage] = useState("flashcards")
+  const [quizTopic, setQuizTopic] = useState(null)
 
   if (loading) {
     return (
@@ -29,14 +30,25 @@ function AppContent() {
     return <AuthPage />
   }
 
+  const handleQuizMe = (cardTitle) => {
+    setQuizTopic(cardTitle)
+    setCurrentPage("quiz")
+  }
+
   const renderCurrentPage = () => {
     switch (currentPage) {
-      case "home" :
+      case "home":
         return <Home onPageChange={setCurrentPage} />
       case "flashcards":
-        return <FlashcardDeck />
+        return <FlashcardDeck onQuizMe={handleQuizMe} />
       case "quiz":
-        return <QuizPage />
+        return (
+          <QuizPage
+            initialTopic={quizTopic}
+            onTopicClear={() => setQuizTopic(null)}
+            onPageChange={setCurrentPage}
+          />
+        )
       case "leaderboard":
         return <LeaderboardPage />
       case "profile":
